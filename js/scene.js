@@ -1,6 +1,6 @@
 // Dabba Cricket: ball flight, fielders and effects, in pitch coordinates.
 // Pitch frame F: mid, fwd (batsman -> bowler), side, up, len (metres, world coords).
-import { ZONES } from './rules.js?v=9';
+import { ZONES } from './rules.js?v=10';
 
 const add = (a, b) => a.map((v, i) => v + b[i]), mul = (a, k) => a.map(v => v * k);
 export const P = (F, along, across, h = 0) => add(add(add(F.mid, mul(F.fwd, along)), mul(F.side, across)), mul(F.up, h));
@@ -70,3 +70,24 @@ export function addShadow(b, F, pos) { // small dark disc under the ball on the 
   b.quad([add(g, add(mul(F.side, -r), mul(F.fwd, -r))), add(g, add(mul(F.side, r), mul(F.fwd, -r))), add(g, add(mul(F.side, r), mul(F.fwd, r))), add(g, add(mul(F.side, -r), mul(F.fwd, r)))], col);
 }
 function dotUp(F, p) { const d = p.map((v, i) => v - F.mid[i]); return d[0] * F.up[0] + d[1] * F.up[1] + d[2] * F.up[2]; }
+
+// fading trail behind a flying ball
+export function addTrail(b, F, posAt, s, n = 6) {
+  for (let k = 1; k <= n; k++) { const ss = s - k * 0.03; if (ss <= 0) break; addBallTinted(b, posAt(ss), F, 0.0055 * (1 - k / (n + 2)), 0.55 * (1 - k / (n + 1))); }
+}
+function addBallTinted(b, pos, F, r, alpha) {
+  const col = [0.97, 0.77, 0.12, alpha], s = [F.side, F.up, F.fwd];
+  const pts = [mul(s[0], r), mul(s[0], -r), mul(s[1], r), mul(s[1], -r), mul(s[2], r), mul(s[2], -r)].map(o => add(pos, o));
+  const [px, nx, py, ny, pz, nz] = pts;
+  for (const [a, c] of [[px, pz], [pz, nx], [nx, nz], [nz, px]]) { b.tri(a, c, py, col); b.tri(c, a, ny, col); }
+}
+// the batsman's three stumps tumbling backwards (k = 0..1)
+export function addFallingStumps(b, F, k) {
+  const L = F.len / 2, h = 0.035, w = 0.0022, col = [0.97, 0.77, 0.12, 1];
+  [-0.009, 0, 0.009].forEach((across, i) => {
+    const ang = Math.min(1.45, k * (1.6 + i * 0.35)), slide = k * (0.015 + i * 0.006);
+    const base = P(F, -(L - 0.006) - slide, across + (i - 1) * k * 0.01, 0);
+    const top = add(base, add(mul(F.up, h * Math.cos(ang)), mul(F.fwd, -h * Math.sin(ang))));
+    b.quad([add(base, mul(F.side, -w)), add(base, mul(F.side, w)), add(top, mul(F.side, w)), add(top, mul(F.side, -w))], col);
+  });
+}
