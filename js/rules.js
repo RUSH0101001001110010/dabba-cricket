@@ -63,6 +63,13 @@ const rnd = a => a[Math.floor(Math.random() * a.length)];
 export function randomConditions(ground = 'gully') {
   return { pitch: rnd(['Dusty', 'Green', 'Flat']), light: GROUNDS[ground].lights ? 'Floodlights' : rnd(['Day', 'Floodlights']) };
 }
+// 'computer captain' for the solo challenge: put fielders where this batsman has been scoring
+export function smartField(n, log) {
+  const w = {}; for (const r of log) { const z = SHOT_ZONE[r.shot]; if (z && r.runs > 0) w[z] = (w[z] || 0) + r.runs; }
+  const hot = Object.keys(w).sort((a, b) => w[b] - w[a]).slice(0, Math.max(1, n - 1));
+  const rest = ZONES.filter(z => !hot.includes(z)).sort(() => Math.random() - 0.5);
+  return { field: new Set([...hot, ...rest].slice(0, n)), hot };
+}
 export function randomField(n) { const z = [...ZONES].sort(() => Math.random() - 0.5); return new Set(z.slice(0, n)); }
 
 // ---------------- match ----------------
@@ -73,7 +80,10 @@ export class Match {
     this.innings = []; this.phase = 'toss'; this.super = false; this.winner = null;
   }
   get inn() { return this.innings[this.innings.length - 1]; }
-  get fielders() { return GROUNDS[this.ground].fielders; }
+  get fielders() { // challenge: one more fielder every two overs, up to 5
+    if (this.mode === 'challenge') return Math.min(5, GROUNDS[this.ground].fielders + Math.floor((this.inn ? this.inn.balls : 0) / 12));
+    return GROUNDS[this.ground].fielders; }
+  get over() { return this.inn ? Math.floor(this.inn.balls / 6) : 0; }
   toss(batFirst) { // batFirst = index of the player who bats first
     this.innings.push(this.newInnings(batFirst)); this.phase = 'field'; return this;
   }
@@ -96,6 +106,7 @@ export class Match {
     return r;
   }
   endInnings() {
+    if (this.mode === 'challenge') { this.phase = 'matchEnd'; return; }
     const n = this.innings.length;
     if (n % 2 === 1) { this.phase = 'inningsBreak'; return; }
     const a = this.innings[n - 2], b = this.innings[n - 1];

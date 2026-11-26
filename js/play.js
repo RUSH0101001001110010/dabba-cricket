@@ -1,20 +1,26 @@
 // Dabba Cricket: game controller (match flow, UI, AR scene, timing tap, sound + effects)
-import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=12';
-import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap } from './rules.js?v=12';
-import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=12';
-import { line } from './commentary.js?v=12';
-import { initAudio, sfx, voice, setMuted, isMuted, ambience } from './sfx.js?v=12';
+import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=14';
+import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap, smartField } from './rules.js?v=14';
+import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=14';
+import { line } from './commentary.js?v=14';
+import { initAudio, sfx, voice, setMuted, isMuted, ambience } from './sfx.js?v=14';
 
 const $ = s => document.querySelector(s);
 const show = (sel, on = true) => { for (const s of sel.split(',')) $(s.trim()).hidden = !on; };
-const hideAll = () => show('#toss,#conds,#field,#rollPanel,#faces,#chips,#tapzone,#callout,#perfectTag,#comm,#resultBtns,#overlay,#hint,#vs,#count,#sticker,#crack', false);
+const hideAll = () => show('#toss,#conds,#field,#rollPanel,#faces,#chips,#tapzone,#callout,#perfectTag,#comm,#resultBtns,#overlay,#hint,#vs,#count,#sticker,#crack,#lvl,#replayTag', false);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const opts = { mode: 'vs', lang: 'ro', easy: false };
 let match = null, ar = null, faces = null, anim = null, showField = false, view2d = false, phase = 'home', autoTimer = null;
+// ---------- Gully Challenge: best score (kept on this phone) ----------
+const ch = { best: { runs: 0, balls: 0, name: '' }, beat: false, streak: 0, bestStreak: 0, lastBall: null, hot: [] };
+try { const b = JSON.parse(localStorage.getItem('dabba_best') || 'null'); if (b && b.runs >= 0) ch.best = b; } catch (e) {}
+function saveBest() { try { localStorage.setItem('dabba_best', JSON.stringify(ch.best)); } catch (e) {} }
+function bestLine() { $('#bestLine').innerHTML = opts.mode === 'challenge' ? (ch.best.runs ? `YOUR BEST: <b>${ch.best.runs}</b> off ${ch.best.balls} balls` : 'Bat till you\'re out. Set your first best!') : ''; }
+const isCh = () => match && match.mode === 'challenge';
 
 // ---------- home ----------
 for (const b of document.querySelectorAll('#segMode button')) b.onclick = () => {
-  document.querySelectorAll('#segMode button').forEach(x => x.classList.toggle('on', x === b)); opts.mode = b.dataset.v; $('#n2wrap').hidden = opts.mode === 'practice'; };
+  document.querySelectorAll('#segMode button').forEach(x => x.classList.toggle('on', x === b)); opts.mode = b.dataset.v; $('#n2wrap').hidden = opts.mode !== 'vs'; bestLine(); };
 $('#startAR').onclick = async () => {
   initAudio();
   if (!(await xrSupported())) { $('#homeMsg').textContent = 'AR is not available in this browser. Use Chrome on an ARCore phone (update "Google Play Services for AR"), or tap PLAY WITHOUT AR.'; return; }
@@ -25,7 +31,7 @@ $('#startNoAR').onclick = () => { initAudio(); ar = null; view2d = true; $('#vie
 let menuArmed = 0;
 $('#menuBtn').onclick = () => { if (performance.now() - menuArmed < 2500) { goHome(); return; } menuArmed = performance.now(); $('#menuBtn').textContent = 'TAP AGAIN TO EXIT'; setTimeout(() => $('#menuBtn').textContent = 'MENU', 2500); };
 $('#muteBtn').onclick = () => { setMuted(!isMuted()); $('#muteBtn').textContent = isMuted() ? '🔇' : '🔊'; };
-function goHome() { clearTimeout(autoTimer); if (ar) { try { ar.end(); } catch (e) {} ar = null; } view2d = false; $('#view2d').hidden = true; hideAll(); show('#score,#menuBtn,#muteBtn', false); ambience(false); show('#home'); phase = 'home'; }
+function goHome() { clearTimeout(autoTimer); if (ar) { try { ar.end(); } catch (e) {} ar = null; } view2d = false; $('#view2d').hidden = true; hideAll(); show('#score,#menuBtn,#muteBtn', false); ambience(false); show('#home'); phase = 'home'; bestLine(); }
 
 // ---------- AR wiring ----------
 function wireAR() {
@@ -71,11 +77,17 @@ function tapOrWait(el, ms) { return new Promise(res => { let done = false; const
 async function startGame() {
   clearTimeout(autoTimer);
   opts.lang = $('#lang').value; opts.easy = $('#easy').checked;
-  const names = [$('#n1').value.trim() || 'Player 1', opts.mode === 'practice' ? 'Computer' : ($('#n2').value.trim() || 'Player 2')];
-  match = new Match({ mode: opts.mode, names }); firstBall = true;
+  const names = [$('#n1').value.trim() || 'Player 1', opts.mode !== 'vs' ? 'Computer' : ($('#n2').value.trim() || 'Player 2')];
+  match = opts.mode === 'challenge' ? new Match({ mode: 'challenge', names, overs: Infinity, wickets: 1 }) : new Match({ mode: opts.mode, names }); firstBall = true;
+  Object.assign(ch, { beat: false, streak: 0, bestStreak: 0, lastBall: null, hot: [] });
   show('#home', false); hideAll(); show('#score,#menuBtn,#muteBtn'); updateScore(); ambience(true);
   phase = 'toss';
   let bat = 0;
+  if (opts.mode === 'challenge') {
+    $('#lvlSmall').textContent = 'SOLO · ONE WICKET'; $('#lvlTxt').textContent = 'GULLY CHALLENGE';
+    $('#lvlEff').textContent = (ch.best.runs ? `Your best: ${ch.best.runs}. ` : '') + 'Roll both dabbas every ball: one is your shot, the other is the computer\'s ball. Every over gets harder, and the computer captain moves fielders to where you score.';
+    show('#lvl'); sfx.drumroll(0.8); await tapOrWait($('#lvl'), 5000); show('#lvl', false);
+  }
   if (opts.mode === 'vs') {
     $('#tossTxt').textContent = 'TOSS…'; $('#coin').hidden = false; show('#toss'); sfx.drumroll(1.1); await wait(1200);
     bat = Math.random() < 0.5 ? 0 : 1; $('#coin').hidden = true; $('#tossTxt').innerHTML = `${escapeHtml(names[bat].toUpperCase())} WINS THE TOSS<br>· BATTING FIRST ·`; sfx.slam(); await tapOrWait($('#toss'), 1600); show('#toss', false);
@@ -90,12 +102,23 @@ async function startGame() {
 }
 
 let firstBall = true;
-function beginOver() {
+async function beginOver() {
   hideAll(); updateScore();
+  if (match.mode === 'challenge') { await levelUp(); beginBall(); return; }
   if (match.mode === 'practice') { match.autoField(); beginBall(); return; }
   phase = 'field'; buildField(); show('#field');
   $('#fieldTitle').textContent = `${match.names[match.inn.bowl].toUpperCase()}: SET YOUR FIELD`;
 }
+// challenge: each new over the computer captain sets a field from your scoring shots, and timing gets tighter
+async function levelUp() {
+  const o = match.over, n = match.fielders, sf = smartField(n, match.inn.log); match.setField(sf.field); ch.hot = sf.hot;
+  if (o === 0) return;
+  phase = 'level';
+  $('#lvlSmall').textContent = `OVER ${o + 1} · LEVEL ${o + 1}`; $('#lvlTxt').textContent = 'LEVEL UP!';
+  $('#lvlEff').textContent = `${n} fielders · timing ${Math.round((1 - lvlScale()) * 100)}% tighter.` + (sf.hot.length ? ` Computer captain put fielders at ${sf.hot.join(', ')}.` : '');
+  show('#lvl'); sfx.slam(); sfx.drumroll(0.6); await tapOrWait($('#lvl'), 3200); show('#lvl', false);
+}
+const lvlScale = () => isCh() ? Math.max(0.55, Math.pow(0.92, match.over)) : 1;
 let chosen = new Set();
 function buildField() {
   const g = $('#field .ground'); g.querySelectorAll('.z').forEach(n => n.remove()); chosen = new Set();
@@ -155,7 +178,7 @@ function startDelivery() {
   const D = deliveryTime(del) * 1000 * (0.8 + Math.random() * 0.45);          // every ball a different speed
   const t0 = performance.now() + 400 + Math.random() * 900;                     // the run-up isn't always the same length
   anim = { type: 'delivery', del, D, t0, arrive: t0 + D, tapped: null, done: false, bounced: false };
-  anim.win = timingWindows(del, match.cond, opts.easy, shot);
+  anim.win = timingWindows(del, match.cond, opts.easy, shot); const k = lvlScale(); anim.win.perfect *= k; anim.win.good *= k;
   anim.target = 55 + Math.random() * 35;                                        // the bat sits somewhere different on the bar each ball
   const bat = $('#meter .bat') || Object.assign(document.createElement('div'), { className: 'bat' }); bat.style.left = anim.target + '%'; $('#meter').appendChild(bat);
   $('#meter .good').style.width = '0'; $('#meter .perf').style.width = '0';
@@ -183,6 +206,7 @@ function finishDelivery(dt) {
   const r = match.playBall(faces.bat, faces.bowl, timing); r.dt = dt;
   const contact = timing === 'Perfect' || timing === 'Good' || (r.runs > 0 && !r.out);
   if (contact) sfx.bat(timing === 'Perfect'); else if (r.how === 'bowled' || r.how === 'lbw') sfx.stumps(); else sfx.whoosh();
+  ch.lastBall = { del: anim.del, D: anim.D, r };
   const slow = timing === 'Perfect' && r.runs >= 4;
   anim = { type: 'shot', r, t0: performance.now(), D: (r.runs >= 4 ? 1400 : 1000) * (slow ? 1.6 : 1), slow };
   show('#tapzone', false);
@@ -208,7 +232,7 @@ function crack() { // cracked glass across the screen, from where the ball hit
   show('#crack');
 }
 function showResult(r) {
-  phase = 'result'; showField = true; updateScore(); show('#perfectTag', false);
+  phase = 'result'; showField = true; updateScore(); show('#perfectTag', false); $('#perfectTag').textContent = 'PERFECT TIMING!';
   const C = CALL[opts.lang] || CALL.ro;
   const big = r.out ? (r.how === 'window' ? C.window : r.how === 'bowled' ? C.bowled : r.how === 'lbw' ? C.lbw : C.catch)
             : r.runs === 6 ? C.six : r.runs === 4 ? C.four : r.runs === 0 ? C.dot : C.run(r.runs);
@@ -221,6 +245,11 @@ function showResult(r) {
   if (navigator.vibrate) navigator.vibrate(r.out ? [90, 60, 90] : r.runs >= 4 ? 150 : 30);
   say(r.key);
   if (r.out) say('OUT_CALL', true);
+  if (isCh()) {
+    const R = match.inn.runs; ch.streak = r.runs > 0 ? ch.streak + 1 : 0; ch.bestStreak = Math.max(ch.bestStreak, ch.streak); updateScore();
+    if (!ch.beat && ch.best.runs > 0 && R > ch.best.runs) { ch.beat = true; $('#perfectTag').textContent = 'NEW BEST!'; show('#perfectTag'); sfx.fanfare(); petals(30); }
+    else if ([25, 50, 100].some(m => R >= m && R - r.runs < m)) { $('#perfectTag').textContent = R >= 100 ? 'HUNDRED!' : R >= 50 ? 'FIFTY!' : '25 UP!'; show('#perfectTag'); sfx.fanfare(); }
+  }
   $('#comm').innerHTML += `<div style="font:12px Bungee;color:#F7C51E;margin-top:3px">${r.shot.toUpperCase()} vs ${r.delivery.toUpperCase()} · ${r.timing.toUpperCase()}${r.dt != null && Math.abs(r.dt) < 2000 ? ` (${r.dt > 0 ? '+' : ''}${Math.round(r.dt)} ms)` : r.dt == null ? ' (NO SHOT)' : ''}${r.fielded ? ' · FIELDER AT ' + r.zone.toUpperCase() : ''}</div>`;
   show('#resultBtns');
   // move on automatically (tap anywhere to go now)
@@ -228,7 +257,7 @@ function showResult(r) {
 }
 function next() {
   if (phase !== 'result') return; clearTimeout(autoTimer);
-  anim = null; showField = false; show('#callout,#comm,#resultBtns,#sticker,#crack', false); if (ar) ar.hideBatStumps = false;
+  anim = null; showField = false; show('#callout,#comm,#resultBtns,#sticker,#crack,#perfectTag', false); if (ar) ar.hideBatStumps = false;
   if (match.phase === 'roll') beginBall();
   else if (match.phase === 'field') beginOver();
   else if (match.phase === 'inningsBreak') overlay('INNINGS BREAK', `${match.names[match.inn.bat]} scored ${match.scoreText()}. ${match.names[match.inn.bowl]} needs ${match.inn.runs + 1} to win. Pass the phone!`, 'START CHASE', () => { match.startNextInnings(); beginOver(); });
@@ -237,12 +266,13 @@ function next() {
 }
 $('#nextBtn').onclick = next;
 $('#ui').addEventListener('pointerdown', e => { if (phase === 'result' && !e.target.closest('button')) next(); });
-function overlay(title, txt, btn, fn, home = false) {
-  phase = 'overlay'; $('#ovTitle').textContent = title; $('#ovTxt').textContent = txt; $('#ovBtn').textContent = btn; show('#ovHome', home);
+function overlay(title, txt, btn, fn, home = false, html = false) {
+  phase = 'overlay'; $('#ovTitle').textContent = title; $('#ovTxt')[html ? 'innerHTML' : 'textContent'] = txt; $('#ovBtn').textContent = btn; show('#ovHome', home); show('#ovShare', html && isCh());
   $('#ovBtn').onclick = () => { show('#overlay', false); fn(); }; show('#overlay');
 }
 $('#ovHome').onclick = () => goHome();
 function endMatch() {
+  if (isCh()) { challengeEnd(); return; }
   const w = match.winner, n = match.innings.length, a = match.innings[n - 2], b = match.innings[n - 1];
   const txt = w < 0 ? `It's a tie! ${a.runs} each.` : `${match.names[w]} wins! ${match.names[a.bat]} ${a.runs}/${a.wkts} · ${match.names[b.bat]} ${b.runs}/${b.wkts}`;
   say(match.mode === 'practice' && w !== 0 ? 'LOSE' : 'WIN'); sfx.fanfare(); sfx.crowd(1.5, 3); petals(50);
@@ -250,6 +280,7 @@ function endMatch() {
 }
 function updateScore() {
   $('#score').hidden = !(match && match.inn) || phase === 'home';
+  if (isCh() && match.inn) { scoreChallenge(); return; }
   if (!match || !match.inn) { ['#sTeam', '#sRuns', '#sOvers', '#sOther', '#sTarget', '#sBalls', '#sCond'].forEach(s => $(s).textContent = ''); return; }
   const I = match.inn, n = match.innings.length, prev = n > 1 ? match.innings[n - 2] : null;
   $('#sTeam').textContent = match.names[I.bat].toUpperCase(); $('#sRuns').textContent = match.scoreText(); $('#sOvers').textContent = `${match.oversText()}/${I.overs} ov`;
@@ -263,6 +294,65 @@ function updateScore() {
   $('#sBalls').innerHTML = last.map(r => r.out ? '<i class="bw">W</i>' : `<i class="b${r.runs >= 6 ? 6 : r.runs >= 4 ? 4 : r.runs ? 'r' : 0}">${r.runs ? r.runs : '•'}</i>`).join('') + '<i class="e"></i>'.repeat(Math.max(0, 6 - last.length));
   $('#sCond').textContent = `${PITCH_NAME[match.cond.pitch]} · ${match.cond.light === 'Floodlights' ? 'DAY-NIGHT' : 'DAY'} · ${I.wickets - I.wkts} WKT${I.wickets - I.wkts === 1 ? '' : 'S'} LEFT`;
 }
+function scoreChallenge() {
+  const I = match.inn, R = I.runs, B = ch.best.runs;
+  $('#sTeam').textContent = match.names[0].toUpperCase(); $('#sRuns').textContent = R; $('#sOvers').textContent = `(${I.balls} ball${I.balls === 1 ? '' : 's'})`;
+  $('#sOther').textContent = B ? `best: ${B}` : 'first try: set a best!';
+  const need = B - R + 1;
+  $('#sTarget').textContent = !B ? 'GULLY CHALLENGE' : ch.beat ? 'NEW BEST! KEEP GOING' : `${need} TO BEAT YOUR BEST`;
+  $('#sTarget').classList.toggle('hot', !!B && !ch.beat && need <= 6);
+  const inOver = I.balls % 6 === 0 && I.balls > 0 && phase === 'result' ? 6 : I.balls % 6, last = I.log.slice(I.log.length - inOver);
+  $('#sBalls').innerHTML = last.map(r => r.out ? '<i class="bw">W</i>' : `<i class="b${r.runs >= 6 ? 6 : r.runs >= 4 ? 4 : r.runs ? 'r' : 0}">${r.runs ? r.runs : '•'}</i>`).join('') + '<i class="e"></i>'.repeat(Math.max(0, 6 - last.length));
+  $('#sCond').textContent = `LEVEL ${match.over + 1} · ${match.fielders} FIELDERS${ch.streak >= 2 ? ` · STREAK ${ch.streak}` : ''}`;
+}
+// ---------- challenge end: instant replay, best score, share ----------
+async function replay() {
+  const L = ch.lastBall; if (!L) return;
+  phase = 'replay'; hideAll(); show('#replayTag'); showField = true; if (ar) ar.hideBatStumps = false;
+  const D = L.D * 1.6, t0 = performance.now() + 250;
+  anim = { type: 'delivery', del: L.del, D, t0, arrive: t0 + D, done: true }; sfx.whoosh();
+  await wait(250 + D);
+  const r = L.r; anim = { type: 'shot', r, t0: performance.now(), D: 1800, slow: false };
+  if (r.how === 'bowled' || r.how === 'lbw') { if (ar) ar.hideBatStumps = true; sfx.stumps(); } else if (r.how === 'window') sfx.glass(); else sfx.bat(false);
+  await wait(2000); show('#replayTag', false);
+}
+async function challengeEnd() {
+  await replay();
+  const I = match.inn, R = I.runs, old = ch.best.runs, isNew = R > old;
+  if (isNew) { ch.best = { runs: R, balls: I.balls, name: match.names[0] }; saveBest(); }
+  anim = null; showField = false; if (ar) ar.hideBatStumps = false;
+  if (isNew) { sfx.fanfare(); sfx.crowd(1.5, 3); petals(50); say('WIN'); } else say('LOSE');
+  const how = { caught: 'catch out', 'caught behind': 'catch out (edge)', bowled: 'clean bowled', lbw: 'LBW', window: 'window broken' }[I.log[I.log.length - 1].how] || 'out';
+  overlay(isNew ? (old ? 'NEW BEST!' : 'FIRST BEST SET!') : 'OUT!',
+    `<b>${R} off ${I.balls}</b>${escapeHtml(match.names[0])}, ${how} in level ${match.over + 1}. Longest streak: ${ch.bestStreak}.<br>${isNew ? (old ? `Old best was ${old}.` : 'Now beat it!') : `Your best is still ${ch.best.runs}. ${ch.best.runs - R + 1} more next time!`}`,
+    'PLAY AGAIN', () => startGame(), true, true);
+}
+async function shareCard() {
+  const I = match.inn, R = I.runs, name = match.names[0], url = location.origin + location.pathname.replace(/[^/]*$/, '');
+  try { await document.fonts.load('80px Bungee'); } catch (e) {}
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1080; const g = c.getContext('2d');
+  g.fillStyle = '#F7C51E'; g.fillRect(0, 0, 1080, 1080);
+  const cols = ['#D62828', '#F2711C', '#E8338B', '#1F6FB2', '#5DB33B'];
+  for (let i = 0; i < 36; i++) { g.fillStyle = cols[i % 5]; g.fillRect(i * 30, 0, 30, 34); g.fillRect(i * 30, 1046, 30, 34); }
+  g.fillStyle = '#2B2B2B'; g.textAlign = 'center';
+  g.font = '92px Bungee'; g.fillText('DABBA CRICKET', 540, 170);
+  g.font = '40px Bungee'; g.fillText('GULLY CHALLENGE', 540, 240);
+  g.font = '48px Bungee'; g.fillText(name.toUpperCase() + ' SCORED', 540, 380);
+  g.font = '300px Bungee'; g.fillStyle = '#D62828'; g.fillText(String(R), 540, 650); g.fillStyle = '#2B2B2B';
+  g.font = '44px Bungee'; g.fillText(`OFF ${I.balls} BALLS · LEVEL ${match.over + 1}`, 540, 740);
+  g.font = '60px Bungee'; g.fillText('CAN YOU BEAT ME?', 540, 880);
+  g.font = '30px sans-serif'; g.fillText(url.replace(/^https?:\/\//, ''), 540, 960);
+  window.__shareCard = c.toDataURL('image/png');
+  const text = `I scored ${R} off ${I.balls} balls in Dabba Cricket's Gully Challenge! Can you beat me? ${url}`;
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  try {
+    const file = new File([blob], 'dabba-cricket-challenge.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    if (navigator.share) { await navigator.share({ text }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+$('#ovShare').onclick = () => shareCard();
 // Indian TV / gully words for the big result text, per commentary language
 const CALL = {
   ro: { six: 'CHHAKKA!', four: 'CHAUKA!', catch: 'CATCH OUT!', bowled: 'CLEAN BOWLED!', lbw: 'LBW OUT!', window: 'KHIDKI TOOTI! OUT!', dot: 'DOT BALL', run: n => `${n} RUN${n > 1 ? 'S' : ''}` },
