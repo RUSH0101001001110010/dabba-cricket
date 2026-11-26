@@ -1,5 +1,5 @@
 // Dabba Cricket: camera + cube tracking (stamp detection in a worker, pose, gravity, any-angle top face, settle check)
-import { topFromCube } from './cubepose.js';
+import { topFromCube, CubeReader } from './cubepose.js';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 export const FACE_KEYS = ['drive', 'pull', 'cut', 'loft', 'sweep', 'block', 'yorker', 'bouncer', 'spin', 'slower', 'wide', 'goodlength'];
@@ -12,7 +12,7 @@ export class Tracker {
     this.fovLong = opts.fovLong || 68;     // field of view across the LONG side of the image (deg)
     this.procLong = 1280;                  // processing size, long side (px); drops to 960 if slow
     this.flipUp = false;
-    this.grav = null; this.state = { bat: newCube(), bowl: newCube() };
+    this.grav = null; this.readers = { bat: new CubeReader(), bowl: new CubeReader() }; this.state = { bat: newCube(), bowl: newCube() };
     this.running = false; this.busy = false; this.listeners = []; this.seq = 0;
     this.stats = { ms: 0, fps: 0, w: 0, h: 0, motion: false, cam: '' };
     this.worker = new Worker(new URL('./detect-worker.js', import.meta.url), { type: 'module' });
@@ -98,11 +98,11 @@ export class Tracker {
     let tb, tw;
     if (up) { tb = topFromCube(bat, 0, up); tw = topFromCube(bowl, 6, up); }
     else { const p = pairTop(bat, bowl); tb = p ? { face: p[0].id, score: p[2] } : single(bat); tw = p ? { face: p[1].id, score: p[2] } : single(bowl); }
-    settle(this.state.bat, tb, bat); settle(this.state.bowl, tw, bowl);
+    settle(this.state.bat, this.readers.bat.push(tb, bat, MIN_SCORE), tb); settle(this.state.bowl, this.readers.bowl.push(tw, bowl, MIN_SCORE), tw);
     const snap = { markers, up, w, h, bat: { ...this.state.bat }, bowl: { ...this.state.bowl }, stats: { ...this.stats } };
     this.listeners.forEach(fn => fn(snap));
   }
-  resetReads() { this.state = { bat: newCube(), bowl: newCube() }; }
+  resetReads() { this.readers.bat.reset(); this.readers.bowl.reset(); this.state = { bat: newCube(), bowl: newCube() }; }
 }
 function newCube() { return { top: -1, name: '', count: 0, settled: false, score: 0, center: null, seen: 0, low: false }; }
 function single(ms) { return ms.length === 1 ? { face: ms[0].id, score: 0.7 } : null; }
@@ -111,12 +111,7 @@ function pairTop(A, B) {
   for (const a of A) for (const b of B) { const s = a.normal[0] * b.normal[0] + a.normal[1] * b.normal[1] + a.normal[2] * b.normal[2]; if (s > bs) { bs = s; best = [a, b, s]; } }
   return best;
 }
-function settle(st, res, ms) {
-  if (!res || !ms.length) { st.seen = Math.max(0, st.seen - 1); if (st.seen === 0) { st.count = 0; st.settled = false; st.top = -1; } return; }
-  const c = ms.reduce((a, m) => { const k = m.corners.reduce((s, p) => [s[0] + p[0] / 4, s[1] + p[1] / 4], [0, 0]); return [a[0] + k[0] / ms.length, a[1] + k[1] / ms.length]; }, [0, 0]);
-  const moved = st.center ? Math.hypot(c[0] - st.center[0], c[1] - st.center[1]) : 999;
-  st.low = res.score < MIN_SCORE;
-  if (res.face === st.top && moved < 14 && !st.low) st.count++; else { st.count = st.low ? 0 : 1; st.settled = false; }
-  st.top = res.face; st.name = FACE_NAMES[res.face]; st.center = c; st.score = res.score; st.seen = 4;
-  if (st.count >= SETTLE_FRAMES) st.settled = true;
+function settle(st, v, res) {
+  st.top = v.top; st.name = v.top >= 0 ? FACE_NAMES[v.top] : ''; st.settled = v.settled; st.moving = v.moving;
+  st.low = !v.settled && v.low; st.score = res ? res.score : 0;
 }
