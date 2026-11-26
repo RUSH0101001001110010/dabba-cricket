@@ -195,7 +195,7 @@ export function detectMarkers(g, w, h, opt = {}) {
     }
     if (best.d > 1) continue;
     // reorder corners so corners[0] is the marker's own top-left
-    const order = [0, 1, 2, 3].map(i => q[(i + best.rot) % 4]);
+    const order = [0, 1, 2, 3].map(i => q[(i - best.rot + 4) % 4]);
     found.push({ id: best.id, corners: order, err: best.d });
   }
   // keep one per id (largest)
