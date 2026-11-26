@@ -1,5 +1,5 @@
 // Dabba Cricket: camera + cube tracking (stamp detection in a worker, pose, gravity, any-angle top face, settle check)
-import { topFromCube, CubeReader } from './cubepose.js';
+import { topFromCube, CubeReader } from './cubepose.js?v=5';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 export const FACE_KEYS = ['drive', 'pull', 'cut', 'loft', 'sweep', 'block', 'yorker', 'bouncer', 'spin', 'slower', 'wide', 'goodlength'];
@@ -16,7 +16,7 @@ export class Tracker {
     this.grav = null; this.readers = { bat: new CubeReader(), bowl: new CubeReader() }; this.state = { bat: newCube(), bowl: newCube() };
     this.running = false; this.busy = false; this.listeners = []; this.seq = 0;
     this.stats = { ms: 0, fps: 0, w: 0, h: 0, motion: false, cam: '' };
-    this.worker = new Worker(new URL('./detect-worker.js', import.meta.url), { type: 'module' });
+    this.worker = new Worker(new URL('./detect-worker.js?v=5', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e) => this.onResult(e.data);
     this.cams = []; this.camIndex = 0;
     this.mode = 'reading';          // 'reading' -> 'locked' (AR tracking only) -> 'waitRoll' -> 'reading'
@@ -100,7 +100,7 @@ export class Tracker {
   update(markers, w, h, up) {
     const bat = markers.filter(m => m.id < 6), bowl = markers.filter(m => m.id >= 6);
     // AR anchors (cube centres in camera space) are tracked in every mode
-    this.anchors.bat = anchor(this.anchors.bat, bat); this.anchors.bowl = anchor(this.anchors.bowl, bowl);
+    this.anchors.bat = anchor(this.anchors.bat, bat, 0); this.anchors.bowl = anchor(this.anchors.bowl, bowl, 6);
     if (this.mode === 'reading') {
       let tb, tw;
       if (up) { tb = topFromCube(bat, 0, up); tw = topFromCube(bowl, 6, up); }
@@ -135,20 +135,22 @@ export class Tracker {
   readNow() { this.mode = 'reading'; this.locked = null; this.readers.bat.reset(); this.readers.bowl.reset(); this.state = { bat: newCube(), bowl: newCube() }; }
   resetReads() { this.readers.bat.reset(); this.readers.bowl.reset(); this.state = { bat: newCube(), bowl: newCube() }; }
 }
-// cube centre (camera coords, metres) from any visible stamp, smoothed for steady AR
-function anchor(prev, ms) {
+// cube centre (camera coords, metres) + cube rotation, from any visible stamp, smoothed for steady AR
+const NETF = [[[1,0,0],[0,0,1],[0,1,0]],[[1,0,0],[0,-1,0],[0,0,1]],[[0,0,1],[0,-1,0],[-1,0,0]],[[0,0,-1],[0,-1,0],[1,0,0]],[[1,0,0],[0,0,-1],[0,-1,0]],[[1,0,0],[0,1,0],[0,0,-1]]]; // [u, v, n] per net face
+function anchor(prev, ms, base) {
   if (!ms.length) return prev ? { ...prev, age: (prev.age || 0) + 1 } : null;
-  let c = [0, 0, 0], wsum = 0, nrm = [0, 0, 0];
-  for (const m of ms) {
-    const [x, y] = m.R, n = m.normal, t = m.t;
-    const w = Math.max(0.05, -n[2]);
-    const face = [0, 1, 2].map(i => t[i] - (x[i] + y[i]) * STAMP_OFF);   // face centre
-    const cen = [0, 1, 2].map(i => face[i] - n[i] * FACE_M / 2);           // cube centre
-    c = c.map((v, i) => v + cen[i] * w); wsum += w;
-  }
-  c = c.map(v => v / wsum);
-  if (prev && prev.age < 10) { const k = 0.35; c = c.map((v, i) => prev.c[i] + k * (v - prev.c[i])); }
-  return { c, age: 0 };
+  // position and rotation from the stamp seen most straight-on (slanted stamps give poor depth)
+  let best = null, bw = -1;
+  for (const m of ms) { const w = -m.normal[2] * Math.sqrt(m.area || 1); if (w > bw) { bw = w; best = m; } }
+  const [x, y] = best.R, n = best.normal, t = best.t;
+  const face = [0, 1, 2].map(i => t[i] - (x[i] + y[i]) * STAMP_OFF);   // face centre
+  let c = [0, 0, 0].map((_, i) => face[i] - n[i] * FACE_M / 2);         // cube centre
+  // cube rotation (columns = cube axes in camera coords): R_cube = [x y z]_marker * [u v -n]^T
+  const [U, V, Nn] = NETF[best.id - base], z = best.R[2];
+  const col = k => [0, 1, 2].map(i => x[i] * U[k] + y[i] * V[k] - z[i] * Nn[k]);
+  const R = [col(0), col(1), col(2)];
+  if (prev && prev.age < 10) { const k = 0.4; c = c.map((v, i) => prev.c[i] + k * (v - prev.c[i])); }
+  return { c, R, age: 0 };
 }
 function newCube() { return { top: -1, name: '', count: 0, settled: false, score: 0, center: null, seen: 0, low: false }; }
 function single(ms) { return ms.length === 1 ? { face: ms[0].id, score: 0.7 } : null; }

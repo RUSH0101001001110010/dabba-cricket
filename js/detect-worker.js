@@ -1,5 +1,5 @@
 // Runs the stamp detector off the main thread so the camera view stays smooth.
-import { detectMarkers, pose } from './aruco4.js';
+import { detectMarkers, pose } from './aruco4.js?v=5';
 let cvs = null, cx = null;
 self.onmessage = (e) => {
   const { bitmap, w, h, f, size, id } = e.data;
