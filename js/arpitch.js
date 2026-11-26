@@ -11,30 +11,44 @@ const toLocal = (A, p) => { const d = sub(p, A.c); return [dot(A.R[0], d), dot(A
 const toCam = (A, q) => add(A.c, add(add(mul(A.R[0], q[0]), mul(A.R[1], q[1])), mul(A.R[2], q[2])));
 
 export class PitchAnchor {
-  constructor() { this.local = null; this.frame = null; }
-  reset() { this.local = null; this.frame = null; }
-  // returns {pts: named camera-space points} or null
+  constructor() { this.reset(); }
+  reset() { this.local = null; this.frame = null; this.h = null; this.bad = 0; }
+  // always returns {frame, pts} or null (never throws on odd input)
   update(anchors, up) {
-    const A = anchors.bat && anchors.bat.age < 6 ? anchors.bat : null;
-    const B = anchors.bowl && anchors.bowl.age < 6 ? anchors.bowl : null;
+    const A = anchors.bat && anchors.bat.age < 6 && anchors.bat.R ? anchors.bat : null;
+    const B = anchors.bowl && anchors.bowl.age < 6 && anchors.bowl.R ? anchors.bowl : null;
+    if (!A && !B) return null;                       // nothing to anchor to: hide the pitch
     let frame = null;
-    if (A && B && up) {
-      // both cubes: build the pitch frame from their positions, at top-face height
-      const top = mul(up, S / 2);
-      let d = sub(B.c, A.c); d = sub(d, mul(up, dot(d, up)));              // horizontal direction bat -> bowl
-      const dist = Math.hypot(...d); if (dist < 0.05) return this.fromStored(A, B);
-      const fwd = norm(d), side = norm(cross(up, fwd));
-      const len = dist >= PITCH.snapMin && dist <= PITCH.snapMax ? dist : PITCH.len;   // connect the cubes when they're a sensible distance apart
-      const mid = add(mul(add(A.c, B.c), 0.5), top);
-      frame = { mid, fwd, side, up, len };
-      this.local = { A: { mid: toLocal(A, mid), fwd: toLocalDir(A, fwd), side: toLocalDir(A, side), up: toLocalDir(A, up) },
-                     B: { mid: toLocal(B, mid), fwd: toLocalDir(B, fwd), side: toLocalDir(B, side), up: toLocalDir(B, up) }, len };
-    } else frame = this.fromStored(A, B);
-    if (!frame) return null;
-    // light smoothing in camera space
-    if (this.frame) { const k = 0.5; for (const key of ['mid', 'fwd', 'side', 'up']) frame[key] = add(this.frame[key], mul(sub(frame[key], this.frame[key]), k)); frame.len = this.frame.len + (frame.len - this.frame.len) * k; }
+    if (A && B && up) frame = this.fromBoth(A, B, up);
+    if (!frame) frame = this.fromStored(A, B);
+    if (!frame || frame.mid.some(v => !isFinite(v))) return this.frame ? { frame: this.frame, pts: geometry(this.frame) } : null;
+    if (this.frame) {
+      // ignore single wild jumps (bad stamp reads); accept if the jump persists (cube really moved)
+      const jump = Math.hypot(...sub(frame.mid, this.frame.mid));
+      if (jump > 0.06 && ++this.bad < 4) return { frame: this.frame, pts: geometry(this.frame) };
+      this.bad = 0;
+      const k = 0.3;
+      for (const key of ['mid', 'fwd', 'side', 'up']) frame[key] = add(this.frame[key], mul(sub(frame[key], this.frame[key]), k));
+      frame.fwd = norm(frame.fwd); frame.side = norm(frame.side); frame.up = norm(frame.up);
+      frame.len = this.frame.len + (frame.len - this.frame.len) * k;
+    }
     this.frame = frame;
     return { frame, pts: geometry(frame) };
+  }
+  fromBoth(A, B, up) {
+    // both cubes stand on one table: share one plane height, and slide each cube along its camera ray onto it
+    const hA = dot(A.c, up), hB = dot(B.c, up), h = (hA + hB) / 2;
+    this.h = this.h == null ? h : this.h + 0.15 * (h - this.h);
+    const onPlane = C => { const r = dot(C.c, up); const k = this.h / r; return (r !== 0 && k > 0.6 && k < 1.6) ? mul(C.c, k) : C.c; };
+    const a = onPlane(A), b = onPlane(B);
+    let d = sub(b, a); d = sub(d, mul(up, dot(d, up)));
+    const dist = Math.hypot(...d); if (dist < 0.08) return null;           // cubes too close together (e.g. while rolling)
+    const fwd = norm(d), side = norm(cross(up, fwd));
+    const len = dist >= PITCH.snapMin && dist <= PITCH.snapMax ? dist : PITCH.len;
+    const mid = add(mul(add(a, b), 0.5), mul(up, S / 2));
+    this.local = { A: { mid: toLocal(A, mid), fwd: toLocalDir(A, fwd), side: toLocalDir(A, side), up: toLocalDir(A, up) },
+                   B: { mid: toLocal(B, mid), fwd: toLocalDir(B, fwd), side: toLocalDir(B, side), up: toLocalDir(B, up) }, len };
+    return { mid, fwd, side, up, len };
   }
   fromStored(A, B) {
     if (!this.local) return null;

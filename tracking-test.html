@@ -34,7 +34,7 @@ button{font:18px Bungee;padding:14px 26px;border-radius:14px;border:4px solid va
 <body>
 <video id="cam" autoplay muted playsinline></video>
 <canvas id="ov"></canvas>
-<div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>TRACKING TEST · v0.5</span></div>
+<div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>TRACKING TEST · v0.7</span></div>
 <div id="tools"><button id="bCam">CAMERA</button><button id="bFov">FOV 68°</button><button id="bFlip">UP: normal</button><button id="bDbg">DEBUG</button></div>
 <div id="dbg" hidden></div>
 <div id="lockbar" hidden><span id="lockTxt">LOCKED</span><button id="bRoll">NEW ROLL</button><button id="bRead">READ NOW</button></div>
@@ -42,15 +42,16 @@ button{font:18px Bungee;padding:14px 26px;border-radius:14px;border:4px solid va
 <div class="chip" id="cBowl"><small>BOWLER CUBE</small><span>—</span></div>
 <div id="start">
   <div>
-    <h1>TRACKING TEST</h1><p style="margin:0 0 8px;color:#F7C51E">version 0.5</p>
+    <h1>TRACKING TEST</h1><p style="margin:0 0 8px;color:#F7C51E">version 0.7</p>
     <p>Put both dabbas on a table, about 30–40 cm below the phone.<br>Tap start, allow the camera, then roll and watch the names.</p>
     <p><button id="go">START</button></p>
     <p id="err"></p>
   </div>
 </div>
+<script>window.onerror=(m)=>{window.__err=String(m)};</script>
 <script type="module">
-import { Tracker, FACE_NAMES } from './js/tracker.js?v=5';
-import { PitchAnchor } from './js/arpitch.js?v=5';
+import { Tracker, FACE_NAMES } from './js/tracker.js?v=7';
+import { PitchAnchor } from './js/arpitch.js?v=7';
 const pitch = new PitchAnchor();
 const $ = s => document.querySelector(s);
 const video = $('#cam'), ov = $('#ov'), ctx = ov.getContext('2d');
@@ -81,6 +82,10 @@ function chip(el, st, lockedName) {
   el.classList.toggle('ok', st.settled);
 }
 function draw() {
+  try { drawInner(); } catch (e) { window.__err = e.message; }
+  requestAnimationFrame(draw);
+}
+function drawInner() {
   const W = ov.clientWidth, H = ov.clientHeight, dpr = devicePixelRatio || 1;
   if (ov.width !== W * dpr) { ov.width = W * dpr; ov.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -101,9 +106,8 @@ function draw() {
     chip($('#cBat'), last.bat, last.locked && last.locked.batName); chip($('#cBowl'), last.bowl, last.locked && last.locked.bowlName);
     if (last.mode === 'waitRoll') { $('#cBat').querySelector('span').textContent = 'ROLL…'; $('#cBowl').querySelector('span').textContent = 'ROLL…'; }
     if (last.mode === 'locked') drawPitch(last, P);
-    if (showDbg) $('#dbg').textContent = `cam ${(last.stats.cam||'').slice(0,26)}\nproc ${last.w}x${last.h}\ndetect ${last.stats.ms.toFixed(0)} ms\nfps ${last.stats.fps.toFixed(1)}\nmotion ${last.stats.motion ? 'yes' : 'no'}\nup ${last.up ? last.up.map(v => v.toFixed(2)).join(' ') : '—'}\nangle ${(screen.orientation && screen.orientation.angle) || 0}\nmarkers ${last.markers.map(m => m.id).join(',')}\nscore ${last.bat.score.toFixed(2)} / ${last.bowl.score.toFixed(2)}\nmode ${last.mode}  gyro ${last.stats.gyro.toFixed(0)}`;
+    if (showDbg) $('#dbg').textContent = `cam ${(last.stats.cam||'').slice(0,26)}\nproc ${last.w}x${last.h}\ndetect ${last.stats.ms.toFixed(0)} ms\nfps ${last.stats.fps.toFixed(1)}\nmotion ${last.stats.motion ? 'yes' : 'no'}\nup ${last.up ? last.up.map(v => v.toFixed(2)).join(' ') : '—'}\nangle ${(screen.orientation && screen.orientation.angle) || 0}\nmarkers ${last.markers.map(m => m.id).join(',')}\nscore ${last.bat.score.toFixed(2)} / ${last.bowl.score.toFixed(2)}\nmode ${last.mode}  gyro ${last.stats.gyro.toFixed(0)}${window.__err ? '\nERR ' + window.__err : ''}`;
   }
-  requestAnimationFrame(draw);
 }
 // AR preview: fixed-size pitch at top-face height between the cubes (camera only tracks positions now)
 function drawPitch(s, P) {

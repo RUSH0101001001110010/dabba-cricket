@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F7C51E">
+<title>Dabba Cricket · AR test</title>
+<style>
+@font-face{font-family:Bungee;src:url(fonts/Bungee-Regular.ttf)}
+@font-face{font-family:Baloo;src:url(fonts/Baloo2-Medium.ttf)}
+:root{--mar:#F7C51E;--blu:#1F6FB2;--ink:#2B2B2B;--crm:#FAF4E6;--grn:#5DB33B}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:#141210;color:var(--crm);font:16px/1.4 Baloo,system-ui,sans-serif}
+#gl{display:none}
+#ui{position:fixed;inset:0}
+.bar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;padding:8px 12px;background:var(--mar);color:var(--ink);font-family:Bungee;font-size:15px}
+.bar .sp{flex:1}
+.chip{position:absolute;bottom:14px;min-width:46%;padding:10px 12px;border-radius:14px;border:4px solid var(--ink);font-family:Bungee;font-size:19px;color:var(--ink);background:var(--crm);text-align:center}
+.chip small{display:block;font:13px Baloo;opacity:.8}
+#cBat{left:2%;border-color:#B8860B}#cBowl{right:2%;border-color:var(--blu)}
+.chip.ok{background:var(--mar)}#cBowl.ok{background:#9cc6ef}.chip.lock{background:var(--grn)!important}
+#lockbar{position:absolute;left:50%;transform:translateX(-50%);top:50px;display:flex;gap:8px;align-items:center;background:var(--ink);color:var(--mar);padding:6px 8px 6px 14px;border-radius:14px;font-family:Bungee;font-size:14px;white-space:nowrap}
+button{font:16px Bungee;padding:12px 20px;border-radius:14px;border:4px solid var(--ink);background:var(--mar);color:var(--ink);min-height:46px}
+#lockbar button,#tools button{font-size:12px;padding:6px 10px;min-height:36px;border-width:3px}
+#tools{position:absolute;top:50px;left:8px;display:flex;flex-direction:column;gap:6px}
+#dbg{position:absolute;top:96px;right:8px;font:12px/1.35 monospace;background:#000a;padding:6px 8px;border-radius:8px;white-space:pre}
+#hint{position:absolute;left:50%;transform:translateX(-50%);bottom:110px;background:#000b;padding:6px 14px;border-radius:12px;font-size:15px;text-align:center}
+#start{position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px;background:#141210}
+#start h1{font-family:Bungee;color:var(--mar);font-size:34px;margin:0 0 6px}
+#msg{color:#ffb4a8;max-width:520px}
+a{color:var(--mar)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="ui">
+  <div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>AR TEST · v0.7</span></div>
+  <div id="tools" hidden><button id="bExit">EXIT AR</button><button id="bDbg">DEBUG</button></div>
+  <div id="lockbar" hidden><span id="lockTxt"></span><button id="bRoll">NEW ROLL</button><button id="bRead">READ NOW</button></div>
+  <div id="dbg" hidden></div>
+  <div id="hint" hidden>Point at both dabbas · keep them about a ruler apart</div>
+  <div class="chip" id="cBat" hidden><small>BATSMAN CUBE</small><span>—</span></div>
+  <div class="chip" id="cBowl" hidden><small>BOWLER CUBE</small><span>—</span></div>
+  <div id="start">
+    <div>
+      <h1>AR TEST</h1>
+      <p style="margin:0 0 10px;color:#F7C51E">version 0.7 · uses ARCore room tracking</p>
+      <p>Place both dabbas on a table about 30 cm apart.<br>Tap START AR, allow the camera, and move the phone slowly for a second so it can map the table.</p>
+      <p><button id="go">START AR</button></p>
+      <p id="msg"></p>
+      <p><a href="tracking-test.html?v=7">Camera-only test (old)</a></p>
+    </div>
+  </div>
+</div>
+<script>window.onerror = (m) => { window.__err = String(m); const e = document.getElementById('msg'); if (e) e.textContent = 'Error: ' + m; };</script>
+<script type="module">
+import { XRDabba, xrSupported, FACE_NAMES } from './js/xrar.js?v=7';
+const $ = s => document.querySelector(s);
+let ar = null, showDbg = false, info = {};
+const inAR = (on) => { $('#start').hidden = on; for (const id of ['#tools', '#cBat', '#cBowl', '#hint']) $(id).hidden = !on; if (!on) { $('#lockbar').hidden = true; $('#dbg').hidden = true; } };
+function chip(el, v, lockName) {
+  const s = el.querySelector('span'); el.classList.remove('ok', 'lock');
+  if (lockName) { s.textContent = '🔒 ' + lockName; el.classList.add('lock'); return; }
+  if (!v) { s.textContent = '—'; return; }
+  s.textContent = v.moving ? 'ROLLING…' : v.top < 0 ? (v.low ? 'TILT PHONE' : '—') : FACE_NAMES[v.top] + (v.settled ? ' ✓' : '…');
+  if (v.settled) el.classList.add('ok');
+}
+$('#go').onclick = async () => {
+  if (!(await xrSupported())) { $('#msg').textContent = 'This browser cannot start AR here. Use Chrome on an ARCore phone, and make sure "Google Play Services for AR" is installed/updated from the Play Store.'; return; }
+  try {
+    ar = new XRDabba($('#gl'), $('#ui'));
+    ar.on(e => {
+      if (e.type === 'read') { info.read = e; chip($('#cBat'), e.bat); chip($('#cBowl'), e.bowl); $('#hint').hidden = e.markers > 0; }
+      else if (e.type === 'locked') { $('#lockbar').hidden = false; $('#lockTxt').textContent = '🔒 ' + e.locked.batName + ' vs ' + e.locked.bowlName;
+        chip($('#cBat'), null, e.locked.batName); chip($('#cBowl'), null, e.locked.bowlName); $('#hint').hidden = true; if (navigator.vibrate) navigator.vibrate(80); }
+      else if (e.type === 'waiting') { $('#cBat').querySelector('span').textContent = e.rolled.bat ? 'ROLLED ✓' : 'ROLL…'; $('#cBowl').querySelector('span').textContent = e.rolled.bowl ? 'ROLLED ✓' : 'ROLL…'; }
+      else if (e.type === 'reading') { $('#lockbar').hidden = true; }
+      else if (e.type === 'error') { window.__err = e.message; }
+      else if (e.type === 'ended') { inAR(false); }
+      else if (e.type === 'frame' && showDbg) { $('#dbg').textContent = `mode ${e.mode}\ndetect ${e.stats.ms.toFixed(0)} ms\nfps ${e.stats.fps.toFixed(0)}\ntable y ${ar.tableY == null ? '—' : ar.tableY.toFixed(3)}\nbat ${ar.cubes.bat ? ar.cubes.bat.p.map(v => v.toFixed(2)).join(' ') : '—'}\nbowl ${ar.cubes.bowl ? ar.cubes.bowl.p.map(v => v.toFixed(2)).join(' ') : '—'}${window.__err ? '\nERR ' + window.__err : ''}`; }
+    });
+    await ar.start(); inAR(true);
+  } catch (e) { $('#msg').textContent = 'AR could not start: ' + e.message; }
+};
+$('#bExit').onclick = () => ar && ar.end();
+$('#bDbg').onclick = () => { showDbg = !showDbg; $('#dbg').hidden = !showDbg; };
+$('#bRoll').onclick = () => { ar.newRoll(); $('#lockTxt').textContent = 'ROLL BOTH DABBAS'; };
+$('#bRead').onclick = () => { ar.readNow(); };
+</script>
+</body>
+</html>

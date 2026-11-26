@@ -1,5 +1,5 @@
 // Dabba Cricket: camera + cube tracking (stamp detection in a worker, pose, gravity, any-angle top face, settle check)
-import { topFromCube, CubeReader } from './cubepose.js?v=5';
+import { topFromCube, CubeReader } from './cubepose.js?v=7';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 export const FACE_KEYS = ['drive', 'pull', 'cut', 'loft', 'sweep', 'block', 'yorker', 'bouncer', 'spin', 'slower', 'wide', 'goodlength'];
@@ -16,7 +16,7 @@ export class Tracker {
     this.grav = null; this.readers = { bat: new CubeReader(), bowl: new CubeReader() }; this.state = { bat: newCube(), bowl: newCube() };
     this.running = false; this.busy = false; this.listeners = []; this.seq = 0;
     this.stats = { ms: 0, fps: 0, w: 0, h: 0, motion: false, cam: '' };
-    this.worker = new Worker(new URL('./detect-worker.js?v=5', import.meta.url), { type: 'module' });
+    this.worker = new Worker(new URL('./detect-worker.js?v=7', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e) => this.onResult(e.data);
     this.cams = []; this.camIndex = 0;
     this.mode = 'reading';          // 'reading' -> 'locked' (AR tracking only) -> 'waitRoll' -> 'reading'
@@ -117,9 +117,9 @@ export class Tracker {
         const rd = this.readers[k];
         const changed = rd.prev.size > 0 && ms.length > 0 && !ms.some(m => rd.prev.has(m.id));   // completely different faces now visible
         rd.push(null, ms, 1);
-        if (changed && this.gyro < 40) this.rollSeen[k] = true;
+        if (changed && this.gyro < 90) this.rollSeen[k] = true;
         if (!ms.length) this.lostFrames[k]++; else this.lostFrames[k] = 0;
-        if ((rd.moving && this.gyro < 40) || this.lostFrames[k] > 4) this.rollSeen[k] = true;
+        if ((rd.moving && this.gyro < 90) || this.lostFrames[k] > 3) this.rollSeen[k] = true;
       }
       if (this.rollSeen.bat && this.rollSeen.bowl) this.readNow();
     }
