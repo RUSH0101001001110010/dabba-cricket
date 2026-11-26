@@ -14,18 +14,22 @@
 html,body{margin:0;height:100%;background:#141210;color:var(--crm);font:16px/1.4 Baloo,system-ui,sans-serif;overflow:hidden;user-select:none}
 #gl{display:none}
 #ui{position:fixed;inset:0}
-button{font:15px Bungee;padding:10px 16px;border-radius:14px;border:4px solid var(--ink);background:var(--mar);color:var(--ink);min-height:46px;cursor:pointer}
+button{font:14px Bungee;padding:9px 14px;border-radius:12px;border:3px solid var(--ink);background:var(--mar);color:var(--ink);min-height:42px;cursor:pointer}
 button.alt{background:var(--crm)}button.blue{background:#9cc6ef}button.small{font-size:12px;padding:6px 10px;min-height:36px;border-width:3px}
 button:disabled{opacity:.45}
-.panel{position:absolute;left:50%;transform:translateX(-50%);background:var(--crm);color:var(--ink);border:4px solid var(--ink);border-radius:18px;padding:12px 16px;text-align:center;max-width:94vw}
-.panel h2{font:20px Bungee;margin:2px 0 6px}
-.panel{max-height:calc(100% - 56px);overflow:auto}
-@media (orientation:landscape){.panel h2{font-size:17px;margin:0 0 2px}#faces .grid{grid-template-columns:repeat(6,1fr)}#field{display:grid;grid-template-columns:auto auto;gap:4px 14px;align-items:center}#field h2,#field>div:nth-child(2){grid-column:1/3}#field .row{flex-direction:column}}
+.panel{position:absolute;left:50%;top:112px;transform:translateX(-50%);background:var(--crm);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:10px 14px;text-align:center;max-width:min(92vw,460px);max-height:calc(100% - 124px);overflow:auto;box-shadow:4px 4px 0 #0006}
+.panel h2{font:16px Bungee;margin:2px 0 6px}
+@media (orientation:landscape){.panel{top:10px;left:calc(50% + 95px);max-width:min(calc(100vw - 220px),560px);max-height:calc(100% - 20px)}.panel h2{font-size:15px;margin:0 0 2px}#faces .grid{grid-template-columns:repeat(6,1fr)}#field{display:grid;grid-template-columns:auto auto;gap:4px 14px;align-items:center}#field h2,#field>div:nth-child(2){grid-column:1/3}#field .row{flex-direction:column}}
 .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-/* scoreboard: Doordarshan style */
-#score{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:6px 10px;background:#141210ee;border-bottom:3px solid var(--mar);font:22px/1 VT,monospace;color:var(--ph)}
-#score b{font:14px Bungee;color:var(--mar)}#score .sp{flex:1}
-#menuBtn{position:absolute;top:44px;right:8px}
+/* scoreboard: small TV score box in the top-left corner */
+#score{position:absolute;top:10px;left:10px;width:180px;background:#141210e8;border:2px solid var(--mar);border-radius:10px;padding:6px 10px 7px;font:16px/1.15 VT,monospace;color:var(--ph);box-shadow:3px 3px 0 #0008;pointer-events:none;z-index:5}
+#score .r1{display:flex;align-items:baseline;gap:6px}#score .r1 b{font:11px Bungee;color:var(--mar);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sRuns{font:24px/1 VT,monospace;color:#fff}#sOther{font-size:15px}#sOther:empty,#sTarget:empty{display:none}
+#sTarget{font:11px Bungee;color:var(--org);margin-top:2px}#sTarget.hot{color:#fff;background:var(--red);border-radius:5px;padding:1px 5px;display:inline-block;animation:pulse .5s ease-in-out infinite alternate}
+#sBalls{display:flex;gap:3px;margin-top:4px;min-height:17px}#sBalls i{font:10px/17px Bungee;font-style:normal;width:17px;height:17px;border-radius:50%;text-align:center;background:#ffffff26;color:#fff}
+#sBalls i.b0{color:var(--ph)}#sBalls i.b4{background:var(--blu)}#sBalls i.b6{background:var(--pnk)}#sBalls i.bw{background:var(--red)}#sBalls i.e{background:none;border:1px dashed #ffffff40}
+#sCond{font:9px Bungee;color:var(--ph);opacity:.75;margin-top:3px}
+#topR{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:5}
 /* home */
 #home{position:fixed;inset:0;overflow:auto;background:var(--mar);color:var(--ink);display:grid;place-items:center;padding:18px;text-align:center}
 #home h1{font:clamp(40px,11vw,72px)/0.95 Bungee;margin:0}
@@ -36,22 +40,22 @@ button:disabled{opacity:.45}
 .seg button{border:0;border-radius:0;min-height:40px;background:var(--crm)}.seg button.on{background:var(--ink);color:var(--mar)}
 #homeMsg{color:#8a1c1c;max-width:420px;margin:8px auto}
 /* in-game */
-#hint{position:absolute;left:50%;transform:translateX(-50%);top:92px;background:#000b;padding:6px 14px;border-radius:12px;font-size:15px;text-align:center;white-space:nowrap}
-.chips{position:absolute;left:2%;right:2%;bottom:12px;display:flex;gap:8px}
-.chip{flex:1;padding:8px 10px;border-radius:14px;border:4px solid var(--ink);font:17px Bungee;color:var(--ink);background:var(--crm);text-align:center}
-.chip small{display:block;font:12px Baloo;opacity:.8}
+#hint{position:absolute;left:50%;transform:translateX(-50%);bottom:76px;background:#000b;padding:5px 12px;border-radius:10px;font-size:13px;text-align:center;white-space:nowrap}
+.chips{position:absolute;left:50%;transform:translateX(-50%);width:min(94vw,480px);bottom:12px;display:flex;gap:8px}
+.chip{flex:1;padding:5px 8px;border-radius:12px;border:3px solid var(--ink);font:14px Bungee;color:var(--ink);background:var(--crm);text-align:center}
+.chip small{display:block;font:10px Baloo;opacity:.8}
 .chip.bat{border-color:#B8860B}.chip.bowl{border-color:var(--blu)}.chip.ok{background:var(--mar)}.chip.bowl.ok{background:#9cc6ef}.chip.lock{background:var(--grn)}
 #tapzone{position:absolute;left:0;right:0;bottom:0;top:40%;display:grid;place-items:end center;padding-bottom:18px}
-#tapzone .big{font:28px Bungee;background:var(--red);color:#fff;border:5px solid var(--ink);border-radius:50%;width:132px;height:132px;display:grid;place-items:center}
-#meter{position:absolute;left:8%;right:8%;bottom:160px;height:22px;border:3px solid var(--ink);border-radius:12px;background:#ffffffcc;overflow:hidden}
+#tapzone .big{font:20px Bungee;background:var(--red);color:#fff;border:4px solid var(--ink);border-radius:50%;width:96px;height:96px;display:grid;place-items:center;opacity:.92}
+#meter{position:absolute;left:50%;transform:translateX(-50%);width:min(80vw,520px);bottom:128px;height:18px;border:3px solid var(--ink);border-radius:12px;background:#ffffffcc;overflow:hidden}
 #meter .good{position:absolute;top:0;bottom:0;background:#9cc6efcc}#meter .perf{position:absolute;top:0;bottom:0;background:var(--grn)}
-#meter .dot{position:absolute;top:2px;width:14px;height:14px;margin-left:-7px;background:#6cc63f;border:2px solid var(--ink);border-radius:50%}
+#meter .dot{position:absolute;top:1px;width:12px;height:12px;margin-left:-6px;background:#6cc63f;border:2px solid var(--ink);border-radius:50%}
 #meter .bat{position:absolute;top:-4px;bottom:-4px;width:8px;margin-left:-4px;background:var(--org);border:2px solid var(--ink);border-radius:3px}
-#callout{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%) rotate(-4deg);font:clamp(42px,12vw,86px) Bungee;color:var(--mar);-webkit-text-stroke:3px var(--ink);text-shadow:5px 5px 0 var(--ink);white-space:nowrap;pointer-events:none}
+#callout{position:absolute;left:50%;top:28%;transform:translate(-50%,-50%) rotate(-3deg);font:clamp(28px,7vw,52px) Bungee,sans-serif;color:var(--mar);-webkit-text-stroke:2px var(--ink);text-shadow:3px 3px 0 var(--ink);white-space:nowrap;pointer-events:none}
 #callout.out{color:var(--red)}
-#comm{position:absolute;left:4%;right:4%;bottom:118px;background:#141210ee;border:3px solid var(--org);border-radius:10px;padding:6px 12px;font:20px/1.15 VT,monospace;color:var(--ph)}
-#comm b{color:var(--org);font:13px Bungee}
-#resultBtns{position:absolute;left:0;right:0;bottom:18px}
+#comm{position:absolute;left:50%;transform:translateX(-50%);width:min(92vw,500px);bottom:66px;background:#141210e0;border:2px solid var(--org);border-radius:10px;padding:5px 11px;font:17px/1.15 VT,monospace;color:var(--ph)}
+#comm b{color:var(--org);font:11px Bungee}
+#resultBtns{position:absolute;left:0;right:0;bottom:14px}
 /* field setter */
 #field .ground{position:relative;width:min(72vw,300px,calc(100vh - 150px));aspect-ratio:1;margin:6px auto;border-radius:50%;background:radial-gradient(circle,#7cc35a 0 60%,#5DB33B 61%);border:4px solid var(--ink)}
 #field .strip{position:absolute;left:46%;width:8%;top:30%;height:40%;background:#dec480;border:2px solid var(--ink)}
@@ -63,54 +67,54 @@ button:disabled{opacity:.45}
 #view2d{position:absolute;inset:40px 0 0 0;width:100%;height:calc(100% - 40px);background:#2d4a2b}
 #overlay{position:absolute;inset:0;background:#000a;display:grid;place-items:center}
 
-.card{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);background:var(--mar);color:var(--ink);border:5px solid var(--ink);border-radius:20px;padding:16px 22px;text-align:center;box-shadow:8px 8px 0 var(--ink);min-width:260px;animation:slam .35s cubic-bezier(.2,1.6,.4,1)}
-.card small{display:block;font:12px Bungee;opacity:.75}.card .skip{margin-top:6px;font:11px Baloo}
-#condTxt{font:24px Bungee;margin:4px 0}#condEff{margin:2px 0;max-width:340px}
-#tossTxt{font:22px Bungee}.coin{font-size:64px;animation:flip .25s linear infinite}
+.card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--mar);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:12px 18px;text-align:center;box-shadow:4px 4px 0 var(--ink);min-width:220px;max-width:86vw;animation:slam .3s ease-out}
+.card small{display:block;font:10px Bungee;opacity:.75}.card .skip{margin-top:6px;font:11px Baloo}
+#condTxt{font:17px Bungee;margin:4px 0}#condEff{margin:2px 0;max-width:320px;font-size:14px}
+#tossTxt{font:16px Bungee}.coin{font-size:40px;animation:flip .25s linear infinite}
 @keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(360deg)}}
-@keyframes slam{0%{transform:translate(-50%,-50%) scale(2.2);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
-#vs{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:4vw;background:#141210cc}
+@keyframes slam{0%{transform:translate(-50%,-50%) scale(1.2);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+#vs{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:3vw;background:#14121088}
 #vs .side{display:flex;flex-direction:column;align-items:center;gap:6px;animation:inL .4s cubic-bezier(.2,1.5,.4,1)}#vs .side.bowl{animation-name:inR}
-#vs img{width:min(34vw,34vh,220px);aspect-ratio:1;border:5px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 #000}
-#vs b{font:clamp(18px,4.5vw,30px) Bungee;color:var(--mar);-webkit-text-stroke:1.5px var(--ink)}#vs .bowl b{color:#9cc6ef}
-#vs .vsx{font:clamp(40px,10vw,80px) Bungee;color:var(--red);-webkit-text-stroke:3px var(--ink);animation:pulse .5s ease-in-out infinite alternate}
-@keyframes inL{0%{transform:translateX(-60vw) rotate(-20deg)}100%{transform:none}}@keyframes inR{0%{transform:translateX(60vw) rotate(20deg)}100%{transform:none}}
+#vs img{width:min(24vw,30vh,150px);aspect-ratio:1;border:3px solid var(--ink);border-radius:12px;box-shadow:4px 4px 0 #000}
+#vs b{font:clamp(13px,3vw,19px) Bungee;color:var(--mar);-webkit-text-stroke:1px var(--ink)}#vs .bowl b{color:#9cc6ef}
+#vs .vsx{font:clamp(24px,5.5vw,42px) Bungee;color:var(--red);-webkit-text-stroke:2px var(--ink)}
+@keyframes inL{0%{transform:translateX(-25vw);opacity:0}100%{transform:none;opacity:1}}@keyframes inR{0%{transform:translateX(25vw);opacity:0}100%{transform:none;opacity:1}}
 @keyframes pulse{0%{transform:scale(1)}100%{transform:scale(1.15)}}
-#count{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font:clamp(70px,20vw,140px) Bungee;color:#fff;-webkit-text-stroke:4px var(--ink);text-shadow:6px 6px 0 var(--ink)}
+#count{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);font:clamp(44px,11vw,80px) Bungee;color:#fff;-webkit-text-stroke:2px var(--ink);text-shadow:3px 3px 0 var(--ink)}
 #count.go{color:var(--mar)}
-#flash{position:absolute;inset:0;background:#fff;animation:fl .35s ease-out forwards;pointer-events:none}@keyframes fl{0%{opacity:.85}100%{opacity:0}}
+#flash{position:absolute;inset:0;background:#fff;animation:fl .35s ease-out forwards;pointer-events:none}@keyframes fl{0%{opacity:.45}100%{opacity:0}}
 #fx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-#fx i{position:absolute;width:14px;height:14px;border-radius:50% 50% 50% 0;animation:petal 1.8s cubic-bezier(.2,.7,.4,1) forwards}
+#fx i{position:absolute;width:10px;height:10px;border-radius:50% 50% 50% 0;animation:petal 1.8s cubic-bezier(.2,.7,.4,1) forwards}
 @keyframes petal{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 #crack{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#sticker{position:absolute;right:6%;top:22%;background:#fff;color:var(--ink);border:5px solid var(--ink);border-radius:18px;padding:8px 14px;font-size:44px;transform:rotate(8deg);box-shadow:6px 6px 0 var(--ink);animation:slam2 .4s cubic-bezier(.2,1.6,.4,1);text-align:center}
-#sticker span{display:block;font:26px Bungee;color:var(--red)}#sticker small{font:12px Bungee}
-@keyframes slam2{0%{transform:rotate(30deg) scale(2.5);opacity:0}100%{transform:rotate(8deg) scale(1);opacity:1}}
-.shake{animation:shake .5s}@keyframes shake{0%,100%{transform:none}20%{transform:translate(-10px,4px)}40%{transform:translate(9px,-6px)}60%{transform:translate(-7px,5px)}80%{transform:translate(5px,-3px)}}
-#callout{animation:pop .45s cubic-bezier(.2,1.7,.4,1)}@keyframes pop{0%{transform:translate(-50%,-50%) rotate(-4deg) scale(.2)}100%{transform:translate(-50%,-50%) rotate(-4deg) scale(1)}}
-#perfectTag{position:absolute;left:50%;top:18%;transform:translateX(-50%);font:22px Bungee;color:var(--grn);-webkit-text-stroke:1.5px var(--ink)}
+#sticker{position:absolute;right:4%;top:16%;background:#fff;color:var(--ink);border:3px solid var(--ink);border-radius:12px;padding:5px 10px;font-size:26px;line-height:1.1;transform:rotate(8deg);box-shadow:3px 3px 0 var(--ink);animation:slam2 .3s ease-out;text-align:center}
+#sticker span{display:block;font:15px Bungee;color:var(--red)}#sticker small{font:9px Bungee}
+@keyframes slam2{0%{transform:rotate(20deg) scale(1.4);opacity:0}100%{transform:rotate(8deg) scale(1);opacity:1}}
+.shake{animation:shake .5s}@keyframes shake{0%,100%{transform:none}20%{transform:translate(-5px,2px)}40%{transform:translate(4px,-3px)}60%{transform:translate(-3px,2px)}80%{transform:translate(2px,-1px)}}
+#callout{animation:pop .45s cubic-bezier(.2,1.7,.4,1)}@keyframes pop{0%{transform:translate(-50%,-50%) rotate(-3deg) scale(.6);opacity:0}100%{transform:translate(-50%,-50%) rotate(-3deg) scale(1);opacity:1}}
+#perfectTag{position:absolute;left:50%;top:15%;transform:translateX(-50%);font:15px Bungee;color:var(--grn);-webkit-text-stroke:1.5px var(--ink)}
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
 <div id="ui">
   <canvas id="view2d" hidden></canvas>
-  <div id="score" hidden><b id="sTeam">P1</b><span id="sRuns">0/0</span><span id="sOvers">0.0</span><span class="sp"></span><span id="sTarget"></span><b id="sCond"></b></div>
-  <button id="menuBtn" class="small alt" hidden>MENU</button>
+  <div id="score" hidden><div class="r1"><b id="sTeam">P1</b><span id="sRuns">0/0</span><span id="sOvers"></span></div><div id="sOther"></div><div id="sTarget"></div><div id="sBalls"></div><div id="sCond"></div></div>
+  <div id="topR"><button id="muteBtn" class="small alt" hidden>🔊</button><button id="menuBtn" class="small alt" hidden>MENU</button></div>
   <div id="hint" hidden></div>
 
   <!-- toss / start -->
-  <div id="toss" class="card" hidden><div class="coin" id="coin">🪙</div><div id="tossTxt">COIN TOSS…</div></div>
+  <div id="toss" class="card" hidden><div class="coin" id="coin">🪙</div><div id="tossTxt">TOSS…</div></div>
   <!-- conditions -->
-  <div id="conds" class="card" hidden><small>TODAY'S CONDITIONS</small><div id="condTxt"></div><p id="condEff"></p><small class="skip">tap to continue</small></div>
+  <div id="conds" class="card" hidden><small>TODAY'S PITCH</small><div id="condTxt"></div><p id="condEff"></p><small class="skip">tap to continue</small></div>
   <!-- field setter -->
-  <div id="field" class="panel" style="top:48px" hidden><h2 id="fieldTitle">BOWLER: SET YOUR FIELD</h2><div style="font-size:13px">Batsman, look away! Tap <span id="fieldN">3</span> places.</div><div class="ground"><div class="strip"></div></div><div class="row"><button id="fieldAuto" class="alt small">RANDOM</button><button id="fieldOk" disabled>DONE</button></div></div>
+  <div id="field" class="panel" hidden><h2 id="fieldTitle">BOWLER: SET YOUR FIELD</h2><div style="font-size:13px">Batsman, look away! Tap <span id="fieldN">3</span> places.</div><div class="ground"><div class="strip"></div></div><div class="row"><button id="fieldAuto" class="alt small">RANDOM</button><button id="fieldOk" disabled>DONE</button></div></div>
   <!-- roll / read -->
-  <div id="rollPanel" class="panel" style="top:48px" hidden><h2 id="rollTitle">ROLL BOTH DABBAS</h2><div id="rollSub" style="font-size:14px">Point the phone at both cubes.</div>
+  <div id="rollPanel" class="panel" hidden><h2 id="rollTitle">ROLL BOTH DABBAS</h2><div id="rollSub" style="font-size:14px">Point the phone at both cubes.</div>
     
     <div style="margin-top:6px"><button id="manualBtn" class="small alt">CAN'T SCAN? TAP FACES</button></div></div>
   <!-- manual face picker -->
-  <div id="faces" class="panel" style="top:44px" hidden><h2>TAP THE TOP FACES</h2><div style="font:12px Bungee;color:#8a6b00">BATSMAN CUBE</div><div class="grid" id="gBat"></div><div style="font:12px Bungee;color:var(--blu)">BOWLER CUBE</div><div class="grid" id="gBowl"></div><button id="facesOk" disabled>USE THESE</button></div>
+  <div id="faces" class="panel" hidden><h2>TAP THE TOP FACES</h2><div style="font:12px Bungee;color:#8a6b00">BATSMAN CUBE</div><div class="grid" id="gBat"></div><div style="font:12px Bungee;color:var(--blu)">BOWLER CUBE</div><div class="grid" id="gBowl"></div><button id="facesOk" disabled>USE THESE</button></div>
   <div class="chips" id="chips" hidden><div class="chip bat" id="cBat"><small>BATSMAN CUBE</small><span>—</span></div><div class="chip bowl" id="cBowl"><small>BOWLER CUBE</small><span>—</span></div></div>
   <!-- delivery -->
   <div id="tapzone" hidden><div id="meter"><div class="good"></div><div class="perf"></div><div class="dot"></div></div><div class="big">TAP!</div></div>
@@ -139,11 +143,11 @@ button:disabled{opacity:.45}
       <label><input type="checkbox" id="easy" style="width:auto"> Easy timing</label>
       <p class="row" style="margin-top:12px"><button id="startAR">START AR</button><button id="startNoAR" class="alt">PLAY WITHOUT AR</button></p>
       <p id="homeMsg"></p>
-      <p style="font-size:13px">Print the cubes first: <a href="index.html">home page</a> · version 1.0</p>
+      <p style="font-size:13px">Print the cubes first: <a href="index.html">home page</a> · version 1.2</p>
     </div>
   </div>
 </div>
 <script>window.onerror = (m) => { window.__err = String(m); const e = document.getElementById('homeMsg'); if (e) e.textContent = 'Error: ' + m; };</script>
-<script type="module" src="js/play.js?v=10"></script>
+<script type="module" src="js/play.js?v=12"></script>
 </body>
 </html>

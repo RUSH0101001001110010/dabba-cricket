@@ -1,4 +1,5 @@
-// Dabba Cricket: sound effects made in code with WebAudio (no sound files needed), plus optional voice clips.
+// Dabba Cricket: sound effects. Real recordings from sfx/<name>.mp3 (listed in sfx/manifest.json) are used when present;
+// otherwise a soft WebAudio stand-in plays. Plus optional voice clips.
 let ctx = null, master = null, noiseBuf = null, muted = false;
 export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -6,8 +7,29 @@ export function initAudio() {
   master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  loadSamples();
+}
+// ---- recorded samples ----
+const buf = {}; let ambSrc = null;
+// all files are pre-levelled (about -18 dB average); these set the mix
+const VOL = { bat: 1, bat_perfect: 1, whoosh: 0.45, bounce: 0.35, cheer: 0.6, cheer_big: 0.65, aww: 0.6, glass: 0.8, stumps: 0.9,
+  tabla: 0.6, dhol4: 0.75, dhol6: 0.7, win: 0.7, cooker: 0.6, ambience: 0.25 };
+let ambWanted = false;
+function loadSamples() {
+  fetch('sfx/manifest.json').then(r => r.ok ? r.json() : []).then(list => list.forEach(n =>
+    fetch(`sfx/${n}.mp3`).then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { buf[n] = b; if (n === 'ambience' && ambWanted && !ambSrc) ambience(true); }).catch(() => {}))).catch(() => {});
+}
+function sample(name, { gain = 1, rate = 1, loop = false } = {}) {
+  const b = buf[name]; if (!b || !ok()) return !!b;
+  const s = ctx.createBufferSource(); s.buffer = b; s.loop = loop; s.playbackRate.value = rate * (loop ? 1 : 0.96 + Math.random() * 0.08);
+  const g = ctx.createGain(); g.gain.value = (VOL[name] ?? 1) * gain; s.connect(g); g.connect(master); s.start(); return s;
+}
+export function ambience(on) { // quiet mohalla background loop, if the recording is there
+  if (ambSrc) { try { ambSrc.stop(); } catch (e) {} ambSrc = null; }
+  ambWanted = on; if (on && buf.ambience) { const r = sample('ambience', { loop: true }); ambSrc = r && r !== true ? r : null; }
 }
 export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.8; }
+export const isMuted = () => muted;
 const now = () => ctx.currentTime;
 function noise(t0, dur, { type = 'bandpass', freq = 1000, q = 1, gain = 0.5, attack = 0.005, release = dur } = {}) {
   const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
@@ -22,27 +44,30 @@ function tone(t0, dur, { freq = 440, to = null, type = 'sine', gain = 0.3, attac
 }
 const ok = () => ctx && !muted;
 export const sfx = {
-  bat(perfect) { if (!ok()) return; const t = now();                    // crack of tape-ball on bat
+  bat(perfect) { if (!ok() || sample(perfect && buf.bat_perfect ? 'bat_perfect' : 'bat')) return; const t = now();                    // crack of tape-ball on bat
     noise(t, 0.08, { type: 'highpass', freq: perfect ? 2500 : 1500, gain: perfect ? 0.9 : 0.6, release: perfect ? 0.12 : 0.08 });
     tone(t, 0.09, { freq: perfect ? 1400 : 900, to: 300, type: 'triangle', gain: perfect ? 0.5 : 0.35 });
     if (perfect) tone(t + 0.01, 0.25, { freq: 2600, to: 1800, gain: 0.12 }); },
-  whoosh() { if (!ok()) return; const t = now(); const n = noise(t, 0.25, { freq: 600, q: 2, gain: 0.25, attack: 0.08, release: 0.2 }); n.f.frequency.exponentialRampToValueAtTime(2400, t + 0.25); },
-  bounce() { if (!ok()) return; tone(now(), 0.07, { freq: 220, to: 120, type: 'triangle', gain: 0.25 }); },
-  thud() { if (!ok()) return; tone(now(), 0.12, { freq: 160, to: 70, gain: 0.35 }); },
-  crowd(level = 1, dur = 2.2) { if (!ok()) return; const t = now();     // cheering: wide noise swells
+  whoosh() { if (!ok() || sample('whoosh')) return; const t = now(); const n = noise(t, 0.25, { freq: 600, q: 2, gain: 0.25, attack: 0.08, release: 0.2 }); n.f.frequency.exponentialRampToValueAtTime(2400, t + 0.25); },
+  bounce() { if (!ok() || sample('bounce')) return; tone(now(), 0.07, { freq: 220, to: 120, type: 'triangle', gain: 0.25 }); },
+  thud() { if (!ok() || sample('thud')) return; tone(now(), 0.12, { freq: 160, to: 70, gain: 0.35 }); },
+  crowd(level = 1, dur = 2.2) { if (!ok() || sample(level > 1.2 && buf.cheer_big ? 'cheer_big' : 'cheer')) return; const t = now(); level *= 0.6;     // cheering: wide noise swells
     noise(t, dur, { freq: 900, q: 0.6, gain: 0.25 * level, attack: 0.25, release: dur });
     noise(t + 0.05, dur, { freq: 2200, q: 0.8, gain: 0.12 * level, attack: 0.3, release: dur * 0.9 });
     for (let i = 0; i < 6 * level; i++) tone(t + 0.1 + Math.random() * 0.8, 0.25, { freq: 700 + Math.random() * 900, to: 500 + Math.random() * 600, type: 'sawtooth', gain: 0.025 }); },
-  groan() { if (!ok()) return; const t = now(); noise(t, 1.2, { freq: 400, q: 0.7, gain: 0.25, attack: 0.15, release: 1.1 }); tone(t, 1.0, { freq: 300, to: 160, type: 'sawtooth', gain: 0.04 }); },
-  glass() { if (!ok()) return; const t = now();                         // window smash
+  groan() { if (!ok() || sample('aww')) return; const t = now(); noise(t, 1.2, { freq: 400, q: 0.7, gain: 0.25, attack: 0.15, release: 1.1 }); tone(t, 1.0, { freq: 300, to: 160, type: 'sawtooth', gain: 0.04 }); },
+  glass() { if (!ok() || sample('glass')) return; const t = now();                         // window smash
     noise(t, 0.4, { type: 'highpass', freq: 3000, gain: 0.7, release: 0.45 });
     for (let i = 0; i < 9; i++) tone(t + Math.random() * 0.35, 0.3, { freq: 2500 + Math.random() * 4000, gain: 0.08 }); },
-  stumps() { if (!ok()) return; const t = now(); for (let i = 0; i < 3; i++) tone(t + i * 0.06, 0.12, { freq: 520 - i * 60, to: 250, type: 'triangle', gain: 0.35 }); noise(t, 0.1, { freq: 1800, gain: 0.3 }); },
+  stumps() { if (!ok() || sample('stumps')) return; const t = now(); for (let i = 0; i < 3; i++) tone(t + i * 0.06, 0.12, { freq: 520 - i * 60, to: 250, type: 'triangle', gain: 0.35 }); noise(t, 0.1, { freq: 1800, gain: 0.3 }); },
   heartbeat(n = 3, gap = 0.55) { if (!ok()) return; const t = now(); for (let i = 0; i < n; i++) { tone(t + i * gap, 0.12, { freq: 70, to: 45, gain: 0.5 }); tone(t + i * gap + 0.16, 0.1, { freq: 60, to: 40, gain: 0.35 }); } },
-  drumroll(dur = 0.9) { if (!ok()) return; const t = now(); for (let x = 0; x < dur; x += 0.045) noise(t + x, 0.04, { freq: 260, q: 1.5, gain: 0.18 + 0.25 * (x / dur), release: 0.04 }); },
-  slam() { if (!ok()) return; const t = now(); tone(t, 0.25, { freq: 120, to: 50, gain: 0.6 }); noise(t, 0.2, { freq: 800, gain: 0.4 }); },
+  drumroll(dur = 0.9) { if (!ok() || sample('tabla')) return; const t = now(); for (let x = 0; x < dur; x += 0.045) noise(t + x, 0.04, { freq: 260, q: 1.5, gain: 0.18 + 0.25 * (x / dur), release: 0.04 }); },
+  slam() { if (!ok()) return; const t = now(); tone(t, 0.18, { freq: 140, to: 70, gain: 0.25 }); },
+  four() { if (ok()) sample('dhol4'); },
+  six() { if (!ok() || sample('dhol6')) return; this.fanfare(); },
+  cooker() { if (ok()) sample('cooker'); },
   pop() { if (!ok()) return; tone(now(), 0.08, { freq: 900, to: 1400, gain: 0.15 }); },
-  fanfare() { if (!ok()) return; const t = now(); [523, 659, 784, 1046].forEach((f, i) => tone(t + i * 0.12, 0.3, { freq: f, type: 'square', gain: 0.08 })); },
+  fanfare() { if (!ok() || sample('win')) return; const t = now(); [523, 659, 784, 1046].forEach((f, i) => tone(t + i * 0.12, 0.3, { freq: f, type: 'square', gain: 0.08 })); },
 };
 // recorded voice clips (e.g. the student's Chacha lines): voice/<ID>.mp3, silently skipped if missing
 const voiceCache = new Map(); let voiceIds = null;

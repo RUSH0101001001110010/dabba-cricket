@@ -1,9 +1,9 @@
 // Dabba Cricket: game controller (match flow, UI, AR scene, timing tap, sound + effects)
-import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=10';
-import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap } from './rules.js?v=10';
-import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=10';
-import { line } from './commentary.js?v=10';
-import { initAudio, sfx, voice } from './sfx.js?v=10';
+import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=12';
+import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap } from './rules.js?v=12';
+import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=12';
+import { line } from './commentary.js?v=12';
+import { initAudio, sfx, voice, setMuted, isMuted, ambience } from './sfx.js?v=12';
 
 const $ = s => document.querySelector(s);
 const show = (sel, on = true) => { for (const s of sel.split(',')) $(s.trim()).hidden = !on; };
@@ -24,7 +24,8 @@ $('#startAR').onclick = async () => {
 $('#startNoAR').onclick = () => { initAudio(); ar = null; view2d = true; $('#view2d').hidden = false; requestAnimationFrame(draw2d); startGame(); };
 let menuArmed = 0;
 $('#menuBtn').onclick = () => { if (performance.now() - menuArmed < 2500) { goHome(); return; } menuArmed = performance.now(); $('#menuBtn').textContent = 'TAP AGAIN TO EXIT'; setTimeout(() => $('#menuBtn').textContent = 'MENU', 2500); };
-function goHome() { clearTimeout(autoTimer); if (ar) { try { ar.end(); } catch (e) {} ar = null; } view2d = false; $('#view2d').hidden = true; hideAll(); show('#score,#menuBtn', false); show('#home'); phase = 'home'; }
+$('#muteBtn').onclick = () => { setMuted(!isMuted()); $('#muteBtn').textContent = isMuted() ? '🔇' : '🔊'; };
+function goHome() { clearTimeout(autoTimer); if (ar) { try { ar.end(); } catch (e) {} ar = null; } view2d = false; $('#view2d').hidden = true; hideAll(); show('#score,#menuBtn,#muteBtn', false); ambience(false); show('#home'); phase = 'home'; }
 
 // ---------- AR wiring ----------
 function wireAR() {
@@ -72,17 +73,17 @@ async function startGame() {
   opts.lang = $('#lang').value; opts.easy = $('#easy').checked;
   const names = [$('#n1').value.trim() || 'Player 1', opts.mode === 'practice' ? 'Computer' : ($('#n2').value.trim() || 'Player 2')];
   match = new Match({ mode: opts.mode, names }); firstBall = true;
-  show('#home', false); hideAll(); show('#score,#menuBtn'); updateScore();
+  show('#home', false); hideAll(); show('#score,#menuBtn,#muteBtn'); updateScore(); ambience(true);
   phase = 'toss';
   let bat = 0;
   if (opts.mode === 'vs') {
-    $('#tossTxt').textContent = 'COIN TOSS…'; $('#coin').hidden = false; show('#toss'); sfx.drumroll(1.1); await wait(1200);
-    bat = Math.random() < 0.5 ? 0 : 1; $('#coin').hidden = true; $('#tossTxt').textContent = `${names[bat].toUpperCase()} BATS FIRST!`; sfx.slam(); await tapOrWait($('#toss'), 1600); show('#toss', false);
+    $('#tossTxt').textContent = 'TOSS…'; $('#coin').hidden = false; show('#toss'); sfx.drumroll(1.1); await wait(1200);
+    bat = Math.random() < 0.5 ? 0 : 1; $('#coin').hidden = true; $('#tossTxt').innerHTML = `${escapeHtml(names[bat].toUpperCase())} WINS THE TOSS<br>· BATTING FIRST ·`; sfx.slam(); await tapOrWait($('#toss'), 1600); show('#toss', false);
   }
   match.toss(bat);
-  const c = match.cond, eff = { Dusty: 'Spin and slower balls are harder to time.', Green: 'Pace balls are harder to time.', Flat: 'Easier timing on every ball.' }[c.pitch];
-  $('#condTxt').textContent = `${c.pitch.toUpperCase()} PITCH · ${c.light.toUpperCase()}`;
-  $('#condEff').textContent = eff + (c.light === 'Floodlights' ? ' Lights make perfect timing a bit harder.' : '');
+  const c = match.cond, eff = { Dusty: 'The ball will turn. Spin and slower balls are harder to time.', Green: 'Help for the fast bowlers. Pace balls are harder to time.', Flat: 'A batting track. Easier timing on every ball.' }[c.pitch];
+  $('#condTxt').textContent = `${PITCH_NAME[c.pitch]} · ${c.light === 'Floodlights' ? 'DAY-NIGHT' : 'DAY MATCH'}`;
+  $('#condEff').textContent = eff + (c.light === 'Floodlights' ? ' Under the lights, perfect timing is a bit harder.' : '');
   phase = 'conds'; show('#conds'); sfx.slam(); say('CONDITIONS_' + c.pitch.toUpperCase());
   await tapOrWait($('#conds'), 2600); show('#conds', false);
   say('MATCH_START'); beginOver();
@@ -208,13 +209,14 @@ function crack() { // cracked glass across the screen, from where the ball hit
 }
 function showResult(r) {
   phase = 'result'; showField = true; updateScore(); show('#perfectTag', false);
-  const big = r.out ? (r.how === 'window' ? 'WINDOW! OUT!' : r.how === 'bowled' ? 'BOWLED!' : r.how === 'lbw' ? 'LBW! OUT!' : 'CAUGHT!')
-            : r.runs === 6 ? 'SIX!' : r.runs === 4 ? 'FOUR!' : r.runs === 0 ? 'DOT BALL' : `${r.runs} RUN${r.runs > 1 ? 'S' : ''}`;
+  const C = CALL[opts.lang] || CALL.ro;
+  const big = r.out ? (r.how === 'window' ? C.window : r.how === 'bowled' ? C.bowled : r.how === 'lbw' ? C.lbw : C.catch)
+            : r.runs === 6 ? C.six : r.runs === 4 ? C.four : r.runs === 0 ? C.dot : C.run(r.runs);
   const c = $('#callout'); c.textContent = big; c.classList.toggle('out', r.out); c.hidden = true; void c.offsetWidth; c.hidden = false;
   // feel
-  if (r.runs === 6) { petals(60); sfx.crowd(1.4); sfx.fanfare(); flash(); }
-  else if (r.runs === 4) { petals(25); sfx.crowd(1); }
-  else if (r.out) { shake(); show('#sticker'); if (r.how === 'window') { crack(); sfx.glass(); } else if (r.how !== 'bowled' && r.how !== 'lbw') sfx.groan(); else sfx.groan(); }
+  if (r.runs === 6) { petals(36); sfx.six(); sfx.crowd(1.4); flash(); }
+  else if (r.runs === 4) { petals(18); sfx.four(); sfx.crowd(1); }
+  else if (r.out) { shake(); show('#sticker'); if (r.how === 'window') { crack(); sfx.glass(); setTimeout(() => sfx.groan(), 500); } else sfx.groan(); }
   else if (r.runs === 0) sfx.thud(); else sfx.pop();
   if (navigator.vibrate) navigator.vibrate(r.out ? [90, 60, 90] : r.runs >= 4 ? 150 : 30);
   say(r.key);
@@ -230,7 +232,7 @@ function next() {
   if (match.phase === 'roll') beginBall();
   else if (match.phase === 'field') beginOver();
   else if (match.phase === 'inningsBreak') overlay('INNINGS BREAK', `${match.names[match.inn.bat]} scored ${match.scoreText()}. ${match.names[match.inn.bowl]} needs ${match.inn.runs + 1} to win. Pass the phone!`, 'START CHASE', () => { match.startNextInnings(); beginOver(); });
-  else if (match.phase === 'superOver') { say('SUPER_OVER'); sfx.drumroll(1.2); overlay('SUPER OVER!', 'Scores are level. One over, one wicket each.', 'PLAY SUPER OVER', () => { match.startNextInnings(); beginOver(); }); }
+  else if (match.phase === 'superOver') { say('SUPER_OVER'); sfx.drumroll(1.2); sfx.cooker(); overlay('SUPER OVER!', 'Scores are level. One over, one wicket each.', 'PLAY SUPER OVER', () => { match.startNextInnings(); beginOver(); }); }
   else if (match.phase === 'matchEnd') endMatch();
 }
 $('#nextBtn').onclick = next;
@@ -243,16 +245,31 @@ $('#ovHome').onclick = () => goHome();
 function endMatch() {
   const w = match.winner, n = match.innings.length, a = match.innings[n - 2], b = match.innings[n - 1];
   const txt = w < 0 ? `It's a tie! ${a.runs} each.` : `${match.names[w]} wins! ${match.names[a.bat]} ${a.runs}/${a.wkts} · ${match.names[b.bat]} ${b.runs}/${b.wkts}`;
-  say(match.mode === 'practice' && w !== 0 ? 'LOSE' : 'WIN'); sfx.fanfare(); sfx.crowd(1.5, 3); petals(80);
+  say(match.mode === 'practice' && w !== 0 ? 'LOSE' : 'WIN'); sfx.fanfare(); sfx.crowd(1.5, 3); petals(50);
   overlay(w < 0 ? 'TIE!' : 'MOHALLA CHAMPION!', txt, 'REMATCH', () => startGame(), true);
 }
 function updateScore() {
-  if (!match || !match.inn) { ['#sTeam', '#sRuns', '#sOvers', '#sTarget'].forEach(s => $(s).textContent = ''); $('#sCond').textContent = match ? match.cond.pitch.toUpperCase() : ''; return; }
-  const I = match.inn;
-  $('#sTeam').textContent = match.names[I.bat].toUpperCase(); $('#sRuns').textContent = match.scoreText(); $('#sOvers').textContent = `(${match.oversText()}/${I.overs})`;
-  $('#sTarget').textContent = I.target ? `NEED ${Math.max(0, I.target - I.runs)} OFF ${I.overs * 6 - I.balls}` : '';
-  $('#sCond').textContent = `${match.cond.pitch.toUpperCase()}${match.cond.light === 'Floodlights' ? ' · LIGHTS' : ''}`;
+  $('#score').hidden = !(match && match.inn) || phase === 'home';
+  if (!match || !match.inn) { ['#sTeam', '#sRuns', '#sOvers', '#sOther', '#sTarget', '#sBalls', '#sCond'].forEach(s => $(s).textContent = ''); return; }
+  const I = match.inn, n = match.innings.length, prev = n > 1 ? match.innings[n - 2] : null;
+  $('#sTeam').textContent = match.names[I.bat].toUpperCase(); $('#sRuns').textContent = match.scoreText(); $('#sOvers').textContent = `${match.oversText()}/${I.overs} ov`;
+  // second line: the other side's score once they've batted, else who's bowling
+  $('#sOther').textContent = prev && I.target ? `${match.names[prev.bat]} ${prev.runs}/${prev.wkts}` : match.mode === 'practice' ? '' : `bowler: ${match.names[I.bowl]}`;
+  const left = I.overs * 6 - I.balls, need = I.target ? Math.max(0, I.target - I.runs) : 0;
+  $('#sTarget').textContent = I.target ? `NEED ${need} OFF ${left} BALL${left === 1 ? '' : 'S'}` : (match.innings.length === 1 ? '1ST INNINGS' : '');
+  $('#sTarget').classList.toggle('hot', !!I.target && left <= 6 && need > 0);
+  // this over, ball by ball
+  const inOver = I.balls % 6 === 0 && I.balls > 0 && phase === 'result' ? 6 : I.balls % 6, last = I.log.slice(I.log.length - inOver);
+  $('#sBalls').innerHTML = last.map(r => r.out ? '<i class="bw">W</i>' : `<i class="b${r.runs >= 6 ? 6 : r.runs >= 4 ? 4 : r.runs ? 'r' : 0}">${r.runs ? r.runs : '•'}</i>`).join('') + '<i class="e"></i>'.repeat(Math.max(0, 6 - last.length));
+  $('#sCond').textContent = `${PITCH_NAME[match.cond.pitch]} · ${match.cond.light === 'Floodlights' ? 'DAY-NIGHT' : 'DAY'} · ${I.wickets - I.wkts} WKT${I.wickets - I.wkts === 1 ? '' : 'S'} LEFT`;
 }
+// Indian TV / gully words for the big result text, per commentary language
+const CALL = {
+  ro: { six: 'CHHAKKA!', four: 'CHAUKA!', catch: 'CATCH OUT!', bowled: 'CLEAN BOWLED!', lbw: 'LBW OUT!', window: 'KHIDKI TOOTI! OUT!', dot: 'DOT BALL', run: n => `${n} RUN${n > 1 ? 'S' : ''}` },
+  en: { six: 'SIX!', four: 'FOUR!', catch: 'CATCH OUT!', bowled: 'CLEAN BOWLED!', lbw: 'LBW OUT!', window: 'WINDOW BROKEN! OUT!', dot: 'DOT BALL', run: n => `${n} RUN${n > 1 ? 'S' : ''}` },
+  hi: { six: 'छक्का!', four: 'चौका!', catch: 'कैच आउट!', bowled: 'क्लीन बोल्ड!', lbw: 'LBW आउट!', window: 'खिड़की टूटी! आउट!', dot: 'डॉट बॉल', run: n => `${n} रन` },
+};
+const PITCH_NAME = { Dusty: 'DRY TURNER', Green: 'GREEN TOP', Flat: 'FLAT TRACK' };
 
 // ---------- 2D view (no AR) ----------
 const F2 = { mid: [0, 0, 0], fwd: [1, 0, 0], side: [0, 1, 0], up: [0, 0, 1], len: 0.30 };
