@@ -32,7 +32,7 @@ button{font:18px Bungee;padding:14px 26px;border-radius:14px;border:4px solid va
 <video id="cam" autoplay muted playsinline></video>
 <canvas id="ov"></canvas>
 <div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>TRACKING TEST</span></div>
-<div id="tools"><button id="bFov">FOV 66°</button><button id="bFlip">UP: normal</button><button id="bDbg">DEBUG</button></div>
+<div id="tools"><button id="bCam">CAMERA</button><button id="bFov">FOV 68°</button><button id="bFlip">UP: normal</button><button id="bDbg">DEBUG</button></div>
 <div id="dbg" hidden></div>
 <div class="chip" id="cBat"><small>BATSMAN CUBE</small><span>—</span></div>
 <div class="chip" id="cBowl"><small>BOWLER CUBE</small><span>—</span></div>
@@ -50,20 +50,21 @@ const $ = s => document.querySelector(s);
 const video = $('#cam'), ov = $('#ov'), ctx = ov.getContext('2d');
 const tr = new Tracker(video);
 let showDbg = false, last = null;
-const fovs = [56, 62, 66, 70, 76]; let fi = 2;
-$('#bFov').onclick = () => { fi = (fi + 1) % fovs.length; tr.hfov = fovs[fi]; $('#bFov').textContent = 'FOV ' + fovs[fi] + '°'; };
+const fovs = [60, 68, 76, 90, 110]; let fi = 1;
+$('#bFov').onclick = () => { fi = (fi + 1) % fovs.length; tr.fovLong = fovs[fi]; $('#bFov').textContent = 'FOV ' + fovs[fi] + '°'; };
+$('#bCam').onclick = async () => { const l = await tr.nextCamera(); $('#bCam').textContent = 'CAM ' + (tr.camIndex + 1) + '/' + tr.cams.length; };
 $('#bFlip').onclick = () => { tr.flipUp = !tr.flipUp; $('#bFlip').textContent = 'UP: ' + (tr.flipUp ? 'flipped' : 'normal'); };
 $('#bDbg').onclick = () => { showDbg = !showDbg; $('#dbg').hidden = !showDbg; };
 $('#go').onclick = async () => {
   try {
     if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) { try { await DeviceMotionEvent.requestPermission(); } catch (e) {} }
     try { await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } catch (e) {}
-    await tr.start(); $('#start').hidden = true;
+    await tr.start(); $('#start').hidden = true; $('#bCam').textContent = 'CAM ' + (tr.camIndex + 1) + '/' + tr.cams.length;
   } catch (e) { $('#err').textContent = 'Camera could not start: ' + e.message + '. Open this page over https (or localhost) in Chrome and allow the camera.'; }
 };
 tr.on(s => { last = s; });
 function chip(el, st) {
-  el.querySelector('span').textContent = st.top < 0 ? '—' : st.name + (st.settled ? ' ✓' : '…');
+  el.querySelector('span').textContent = st.top < 0 ? '—' : (st.low ? 'TILT PHONE UP' : st.name + (st.settled ? ' ✓' : '…'));
   el.classList.toggle('ok', st.settled);
 }
 function draw() {
@@ -74,7 +75,7 @@ function draw() {
     const sc = Math.max(W / last.w, H / last.h), ox = (W - last.w * sc) / 2, oy = (H - last.h * sc) / 2;
     const P = p => [ox + p[0] * sc, oy + p[1] * sc];
     for (const m of last.markers) {
-      const isTop = m.id === last.bat.top || m.id === last.bowl.top;
+      const isTop = m.id === last.bat.top || m.id === last.bowl.top;  // top may also be inferred from side faces
       ctx.lineWidth = isTop ? 5 : 2.5; ctx.strokeStyle = m.id < 6 ? '#F7C51E' : '#5aa9ff';
       ctx.beginPath(); m.corners.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(...q) : ctx.moveTo(...q); }); ctx.closePath(); ctx.stroke();
       const c = P(m.corners.reduce((a, p) => [a[0] + p[0] / 4, a[1] + p[1] / 4], [0, 0]));
@@ -85,7 +86,7 @@ function draw() {
     }
     if (showDbg && last.up) { ctx.strokeStyle = '#ff0'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.lineTo(W / 2 + last.up[0] * 80, H / 2 + last.up[1] * 80); ctx.stroke(); }
     chip($('#cBat'), last.bat); chip($('#cBowl'), last.bowl);
-    if (showDbg) $('#dbg').textContent = `proc ${last.w}x${last.h}\ndetect ${last.stats.ms.toFixed(0)} ms\nfps ${last.stats.fps.toFixed(1)}\nmotion ${last.stats.motion ? 'yes' : 'no'}\nup ${last.up ? last.up.map(v => v.toFixed(2)).join(' ') : '—'}\nangle ${(screen.orientation && screen.orientation.angle) || 0}\nmarkers ${last.markers.map(m => m.id).join(',')}`;
+    if (showDbg) $('#dbg').textContent = `cam ${(last.stats.cam||'').slice(0,26)}\nproc ${last.w}x${last.h}\ndetect ${last.stats.ms.toFixed(0)} ms\nfps ${last.stats.fps.toFixed(1)}\nmotion ${last.stats.motion ? 'yes' : 'no'}\nup ${last.up ? last.up.map(v => v.toFixed(2)).join(' ') : '—'}\nangle ${(screen.orientation && screen.orientation.angle) || 0}\nmarkers ${last.markers.map(m => m.id).join(',')}\nscore ${last.bat.score.toFixed(2)} / ${last.bowl.score.toFixed(2)}`;
   }
   requestAnimationFrame(draw);
 }
