@@ -17,8 +17,10 @@ export const GROUNDS = { gully: { name: 'Gully lane', fielders: 3, window: true 
   maidan: { name: 'Maidan', fielders: 4, window: false }, stadium: { name: 'Stadium', fielders: 5, window: false, lights: true } };
 
 // timing windows (ms either side of the ball reaching the bat)
-export function timingWindows(delivery, cond, easy = false) {
-  let perfect = 55, good = 140;
+const CELL_DIFFICULTY = { G: 1.0, D: 0.9, A: 0.8, E: 0.65, W: 0.55 };   // how hard this shot is against this ball
+export function timingWindows(delivery, cond, easy = false, shot = null) {
+  let perfect = 42, good = 115;
+  if (shot) { const c = MATRIX[shot][DELS.indexOf(delivery)][0]; const k = CELL_DIFFICULTY[c] ?? 1; perfect *= k; good *= (0.5 + 0.5 * k); }
   const harder = (cond.pitch === 'Green' && PACE.has(delivery)) || (cond.pitch === 'Dusty' && SPIN.has(delivery));
   if (harder) { perfect *= 0.75; good *= 0.85; }
   if (cond.pitch === 'Flat') { perfect *= 1.2; good *= 1.1; }
@@ -46,12 +48,12 @@ export function resolve(shot, delivery, timing, field, ground = 'gully') {
   } else if (cell === 'A') {
     if (timing === 'Perfect') runs = 6;
     else if (timing === 'Good') { if (fielded) { out = true; how = 'caught'; } else runs = 4; }
-    else if (timing === 'Early') runs = fielded ? 1 : 2;
+    else if (timing === 'Early') { if (fielded) { out = true; how = 'caught'; } else runs = 2; }   // mistimed early = skied to the fielder
     else if (gullyWindow && (shot === 'Pull' || shot === 'Loft')) { out = true; how = 'window'; }
     else if (fielded) { out = true; how = 'caught'; } else runs = 1;
   } else if (cell === 'E') { ({ runs, out } = { Perfect: { runs: 2, out: false }, Good: { runs: 1, out: false }, Early: { runs: 0, out: false }, Late: { runs: 0, out: true } }[timing]); if (out) how = 'caught behind'; }
   else if (cell === 'D') runs = timing === 'Perfect' ? 1 : 0;
-  else if (cell === 'W') { ({ runs, out } = { Perfect: { runs: 1, out: false }, Good: { runs: 0, out: false }, Early: { runs: 0, out: false }, Late: { runs: 0, out: true } }[timing]); if (out) how = delivery === 'Yorker' ? 'bowled' : 'lbw'; }
+  else if (cell === 'W') { ({ runs, out } = { Perfect: { runs: 1, out: false }, Good: { runs: 0, out: false }, Early: { runs: 0, out: true }, Late: { runs: 0, out: true } }[timing]); if (out) how = delivery === 'Yorker' ? 'bowled' : 'lbw'; }   // early or late against a wicket ball = beaten
   const key = out ? (how === 'window' ? 'OUT_WINDOW' : how === 'caught' || how === 'caught behind' ? 'OUT_CAUGHT' : 'OUT_BOWLED')
             : runs === 6 ? 'SIX' : runs === 4 ? 'FOUR' : runs === 2 ? 'DOUBLE' : runs === 1 ? 'SINGLE' : 'DOT';
   return { runs, out, how, cell, zone, fielded, key, shot, delivery, timing };

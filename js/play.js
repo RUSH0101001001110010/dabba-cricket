@@ -1,8 +1,8 @@
 // Dabba Cricket: game controller (match flow, UI, AR scene, timing tap)
-import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=8';
-import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap } from './rules.js?v=8';
-import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, ZONE_ANGLE } from './scene.js?v=8';
-import { line } from './commentary.js?v=8';
+import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=9';
+import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap } from './rules.js?v=9';
+import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, ZONE_ANGLE, ease } from './scene.js?v=9';
+import { line } from './commentary.js?v=9';
 
 const $ = s => document.querySelector(s);
 const show = (sel, on = true) => { for (const s of sel.split(',')) $(s.trim()).hidden = !on; };
@@ -29,7 +29,7 @@ function goHome() { if (ar) { try { ar.end(); } catch (e) {} ar = null; } view2d
 function wireAR() {
   ar.scene = (F, b) => {
     const now = performance.now();
-    if (anim && anim.type === 'delivery') { const u = Math.max(0, Math.min(1, (now - anim.t0) / anim.D)); if (now >= anim.t0) { const p = deliveryPos(F, anim.del, u); addShadow(b, F, p); addBall(b, p, F); } }
+    if (anim && anim.type === 'delivery') { const u = ease(anim.del, (now - anim.t0) / anim.D); if (now >= anim.t0) { const p = deliveryPos(F, anim.del, u); addShadow(b, F, p); addBall(b, p, F); } }
     if (anim && anim.type === 'shot') { const s = Math.min(1, (now - anim.t0) / anim.D); const p = shotPos(F, anim.r, s); addShadow(b, F, p); addBall(b, p, F); }
     if (showField && match) for (const z of match.inn.field) addFielder(b, F, z);
   };
@@ -109,17 +109,9 @@ function onLocked(batFace, bowlFace) {
   faces = { bat: batFace, bowl: bowlFace }; if (ar) ar.paused = true;
   setChipText('#cBat', '🔒 ' + SHOTS[batFace].toUpperCase(), true); setChipText('#cBowl', '🔒 ' + DELS[bowlFace].toUpperCase(), true);
   $('#rollTitle').textContent = `${SHOTS[batFace].toUpperCase()} vs ${DELS[bowlFace].toUpperCase()}`;
-  $('#rollSub').textContent = 'Locked! Re-roll once per over, or bowl.'; show('#hint', false); show('#faces', false); show('#rollPanel,#chips');
-  $('#rrBat').disabled = match.inn.rerolls.bat < 1 || !ar; $('#rrBowl').disabled = match.inn.rerolls.bowl < 1 || !ar;
+  $('#rollSub').textContent = 'Locked! Batsman, get ready to tap.'; show('#hint', false); show('#faces', false); show('#rollPanel,#chips');
   show('#lockRow');
   if (navigator.vibrate) navigator.vibrate(60);
-}
-$('#rrBat').onclick = () => reroll('bat');
-$('#rrBowl').onclick = () => reroll('bowl');
-function reroll(side) {
-  if (!match.useReroll(side)) return; say('REROLL'); show('#lockRow', false); faces = null;
-  $('#rollSub').textContent = side === 'bat' ? 'Batsman: roll your dabba again.' : 'Bowler: roll your dabba again.';
-  if (ar) { ar.paused = false; ar.newRoll(side); }
 }
 // manual faces
 function openFaces() {
@@ -136,32 +128,37 @@ $('#manualBtn').onclick = () => { if (ar) ar.paused = true; openFaces(); };
 $('#bowlBtn').onclick = () => {
   if (!faces) return;
   phase = 'bowl'; hideAll(); show('#tapzone');
-  const del = DELS[faces.bowl], D = deliveryTime(del) * 1000, t0 = performance.now() + 700;
+  const del = DELS[faces.bowl], shot = SHOTS[faces.bat];
+  const D = deliveryTime(del) * 1000 * (0.8 + Math.random() * 0.45);          // every ball a different speed
+  const t0 = performance.now() + 500 + Math.random() * 900;                     // the bowler's run-up isn't always the same length
   anim = { type: 'delivery', del, D, t0, arrive: t0 + D, tapped: null, done: false };
-  anim.win = timingWindows(del, match.cond, opts.easy);
-  const span = D + anim.win.good + 150, pct = ms => Math.max(0, Math.min(100, 100 * ms / span));
-  const gEl = $('#meter .good'), pEl = $('#meter .perf');
-  gEl.style.left = pct(D - anim.win.good) + '%'; gEl.style.width = (pct(D + anim.win.good) - pct(D - anim.win.good)) + '%';
-  pEl.style.left = pct(D - anim.win.perfect) + '%'; pEl.style.width = (pct(D + anim.win.perfect) - pct(D - anim.win.perfect)) + '%';
-  anim.span = span; meterLoop();
+  anim.win = timingWindows(del, match.cond, opts.easy, shot);
+  anim.target = 55 + Math.random() * 35;                                        // where the bat sits on the bar changes every ball
+  $('#meter .good').style.width = '0'; $('#meter .perf').style.width = '0';
+  const bat = $('#meter .bat') || Object.assign(document.createElement('div'), { className: 'bat' }); bat.style.left = anim.target + '%'; $('#meter').appendChild(bat);
+  $('#tapzone .big').textContent = 'TAP!';
+  meterLoop();
 };
 function meterLoop() {
   if (!anim || anim.type !== 'delivery') return;
   const now = performance.now(), el = $('#meter .dot');
-  el.style.left = Math.max(0, Math.min(100, 100 * (now - anim.t0) / anim.span)) + '%';
+  // dot follows the ball's real (uneven) speed and reaches the bat exactly when the ball does
+  const u = (now - anim.t0) / anim.D, prog = u <= 1 ? ease(anim.del, u) : 1 + (u - 1);
+  el.style.left = Math.max(0, Math.min(100, prog * anim.target)) + '%';
+  el.style.opacity = now < anim.t0 ? 0.25 : 1;
   if (!anim.done && now > anim.arrive + anim.win.good + 120 && anim.tapped == null) finishDelivery(null);
   else if (!anim.done && anim.tapped != null && now >= Math.max(anim.arrive, anim.tapAt)) finishDelivery(anim.tapped);
   if (anim && anim.type === 'delivery') requestAnimationFrame(meterLoop);
 }
 $('#tapzone').addEventListener('pointerdown', () => {
   if (!anim || anim.type !== 'delivery' || anim.tapped != null) return;
-  const now = performance.now(); if (now < anim.t0) return;            // too soon: ignore taps before the ball is bowled
+  const now = performance.now(); if (now < anim.t0) { anim.tapped = -9999; anim.tapAt = now; return; }   // swinging before the ball is bowled = way too early
   anim.tapped = now - anim.arrive; anim.tapAt = now;
 });
 function finishDelivery(dt) {
   anim.done = true;
   const timing = classifyTap(dt, anim.win);
-  const r = match.playBall(faces.bat, faces.bowl, timing);
+  const r = match.playBall(faces.bat, faces.bowl, timing); r.dt = dt;
   anim = { type: 'shot', r, t0: performance.now(), D: r.runs >= 4 ? 1400 : 1000 };
   show('#tapzone', false);
   setTimeout(() => showResult(r), anim.D + 100);
@@ -173,7 +170,7 @@ function showResult(r) {
   $('#callout').textContent = big; $('#callout').classList.toggle('out', r.out); show('#callout');
   say(r.key);
   if (!r.out && r.runs === 0 && r.timing !== 'Good') say('TIMING_' + r.timing.toUpperCase());
-  $('#comm').innerHTML += `<div style="font:12px Bungee;color:#F7C51E;margin-top:3px">${r.shot.toUpperCase()} vs ${r.delivery.toUpperCase()} · TIMING: ${r.timing.toUpperCase()}${r.fielded ? ' · FIELDER AT ' + r.zone.toUpperCase() : ''}</div>`;
+  $('#comm').innerHTML += `<div style="font:12px Bungee;color:#F7C51E;margin-top:3px">${r.shot.toUpperCase()} vs ${r.delivery.toUpperCase()} · TIMING: ${r.timing.toUpperCase()}${r.dt != null && Math.abs(r.dt) < 2000 ? ` (${r.dt > 0 ? '+' : ''}${Math.round(r.dt)} ms)` : r.dt == null ? ' (NO SHOT)' : ''}${r.fielded ? ' · FIELDER AT ' + r.zone.toUpperCase() : ''}</div>`;
   const label = { roll: 'NEXT BALL', field: 'NEW OVER', inningsBreak: 'INNINGS BREAK', superOver: 'SUPER OVER!', matchEnd: 'RESULT' }[match.phase] || 'NEXT';
   $('#nextBtn').textContent = label; show('#resultBtns');
   if (navigator.vibrate) navigator.vibrate(r.out ? [80, 60, 80] : r.runs >= 4 ? 120 : 30);
@@ -221,7 +218,7 @@ function draw2d() {
   if (showField && match) for (const z of match.inn.field) { const a = ZONE_ANGLE[z] * Math.PI / 180, [x, y] = pr([-L + 0.03 + Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0]);
     g.fillStyle = '#1F6FB2'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = '11px Baloo'; g.fillText(z, x + 11, y + 4); }
   const now = performance.now(); let p = null;
-  if (anim && anim.type === 'delivery' && now >= anim.t0) p = deliveryPos(F2, anim.del, Math.min(1, (now - anim.t0) / anim.D));
+  if (anim && anim.type === 'delivery' && now >= anim.t0) p = deliveryPos(F2, anim.del, ease(anim.del, (now - anim.t0) / anim.D));
   if (anim && anim.type === 'shot') p = shotPos(F2, anim.r, Math.min(1, (now - anim.t0) / anim.D));
   if (p) { const sh = pr([p[0], p[1], 0]); g.fillStyle = '#0005'; g.beginPath(); g.ellipse(sh[0], sh[1], 7, 4, 0, 0, 7); g.fill();
     const [x, y] = pr(p); g.fillStyle = '#6cc63f'; g.strokeStyle = '#2B2B2B'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke(); }

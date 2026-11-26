@@ -1,6 +1,6 @@
 // Dabba Cricket: ball flight, fielders and effects, in pitch coordinates.
 // Pitch frame F: mid, fwd (batsman -> bowler), side, up, len (metres, world coords).
-import { ZONES } from './rules.js?v=8';
+import { ZONES } from './rules.js?v=9';
 
 const add = (a, b) => a.map((v, i) => v + b[i]), mul = (a, k) => a.map(v => v * k);
 export const P = (F, along, across, h = 0) => add(add(add(F.mid, mul(F.fwd, along)), mul(F.side, across)), mul(F.up, h));
@@ -12,6 +12,14 @@ const DELIVERY = { // where it pitches (fraction from bowler end), sideways drif
   'Spin': { bounce: 0.7, drift: 0.018, t: 1.35, h: 0.02 }, 'Slower': { bounce: 0.72, drift: 0, t: 1.55, h: 0.022 },
   'Wide line': { bounce: 0.75, drift: -0.03, t: 1.05, h: 0.02 }, 'Good length': { bounce: 0.75, drift: 0, t: 1.05, h: 0.022 } };
 export const deliveryTime = d => DELIVERY[d].t;
+// progress of the ball along the pitch for time fraction u (0..1): not constant speed, so it can't be counted
+export function ease(d, u) {
+  u = Math.max(0, Math.min(1, u));
+  if (d === 'Slower') return Math.pow(u, 1.7);                       // floats, then arrives late and quick
+  if (d === 'Spin') return Math.min(1, u + 0.05 * Math.sin(2 * Math.PI * u));
+  if (d === 'Yorker' || d === 'Bouncer') return Math.pow(u, 0.8);   // fast out of the hand
+  return Math.pow(u, 0.95);
+}
 
 // ball position during the delivery, u = 0..1 (bowler end -> batsman's bat)
 export function deliveryPos(F, d, u) {

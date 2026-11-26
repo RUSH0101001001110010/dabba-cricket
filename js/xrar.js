@@ -1,8 +1,8 @@
 // Dabba Cricket: WebXR (ARCore) version. ARCore tracks the room; we read the cubes from the
 // camera image, convert them into room (world) coordinates, and pin the pitch there.
 // After the lock, face reading stops: the pitch stays fixed in the room even if the cubes leave view.
-import { topFromCube, CubeReader } from './cubepose.js?v=8';
-import { geometry, PITCH } from './arpitch.js?v=8';
+import { topFromCube, CubeReader } from './cubepose.js?v=9';
+import { geometry, PITCH } from './arpitch.js?v=9';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 const S = 0.062, MARKER = S * 0.30, STAMP_OFF = 0.27 * S, PROC_LONG = 1280, MIN_SCORE = 0.6;
@@ -29,7 +29,7 @@ export class XRDabba {
     this.cubes = { bat: null, bowl: null };                             // world positions (smoothed) + history
     this.tableY = null; this.frameNo = 0; this.busy = false; this.pending = null;
     this.stats = { ms: 0, fps: 0, cam: 0 }; this.scene = null; this.paused = false;
-    this.worker = new Worker(new URL('./detect-worker.js?v=8', import.meta.url), { type: 'module' });
+    this.worker = new Worker(new URL('./detect-worker.js?v=9', import.meta.url), { type: 'module' });
     this.worker.onmessage = e => this.onDetect(e.data);
   }
   on(fn) { this.listeners.push(fn); }
