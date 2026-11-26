@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F7C51E">
+<title>Dabba Cricket · Tracking test</title>
+<style>
+@font-face{font-family:Bungee;src:url(fonts/Bungee-Regular.ttf)}
+@font-face{font-family:Baloo;src:url(fonts/Baloo2-Medium.ttf)}
+:root{--mar:#F7C51E;--blu:#1F6FB2;--ink:#2B2B2B;--crm:#FAF4E6;--red:#D62828;--grn:#5DB33B}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:#141210;color:var(--crm);font:16px/1.4 Baloo,system-ui,sans-serif;overflow:hidden}
+#cam,#ov{position:fixed;inset:0;width:100%;height:100%}
+#cam{object-fit:cover}
+.bar{position:fixed;left:0;right:0;top:0;display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--mar);color:var(--ink);font-family:Bungee;font-size:15px}
+.bar .sp{flex:1}
+.chip{position:fixed;bottom:14px;min-width:200px;padding:10px 16px;border-radius:14px;border:4px solid var(--ink);font-family:Bungee;font-size:20px;color:var(--ink);background:var(--crm);text-align:center}
+.chip small{display:block;font:14px Baloo;opacity:.8}
+#cBat{left:14px;border-color:#B8860B}#cBowl{right:14px;border-color:var(--blu)}
+.chip.ok{background:var(--mar)}#cBowl.ok{background:#9cc6ef}
+#start{position:fixed;inset:0;display:grid;place-items:center;background:#141210ee;text-align:center;padding:24px}
+#start h1{font-family:Bungee;color:var(--mar);font-size:38px;margin:0 0 6px}
+button{font:18px Bungee;padding:14px 26px;border-radius:14px;border:4px solid var(--ink);background:var(--mar);color:var(--ink);min-height:48px}
+#dbg{position:fixed;top:44px;right:8px;font:12px/1.35 monospace;background:#000a;padding:6px 8px;border-radius:8px;white-space:pre}
+#tools{position:fixed;top:44px;left:8px;display:flex;flex-direction:column;gap:6px}
+#tools button{font-size:12px;padding:6px 10px;min-height:36px;border-width:3px}
+#err{color:#ffb4a8;max-width:520px}
+</style>
+</head>
+<body>
+<video id="cam" autoplay muted playsinline></video>
+<canvas id="ov"></canvas>
+<div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>TRACKING TEST</span></div>
+<div id="tools"><button id="bFov">FOV 66°</button><button id="bFlip">UP: normal</button><button id="bDbg">DEBUG</button></div>
+<div id="dbg" hidden></div>
+<div class="chip" id="cBat"><small>BATSMAN CUBE</small><span>—</span></div>
+<div class="chip" id="cBowl"><small>BOWLER CUBE</small><span>—</span></div>
+<div id="start">
+  <div>
+    <h1>TRACKING TEST</h1>
+    <p>Put both dabbas on a table, about 30–40 cm below the phone.<br>Tap start, allow the camera, then roll and watch the names.</p>
+    <p><button id="go">START</button></p>
+    <p id="err"></p>
+  </div>
+</div>
+<script type="module">
+import { Tracker, FACE_NAMES } from './js/tracker.js';
+const $ = s => document.querySelector(s);
+const video = $('#cam'), ov = $('#ov'), ctx = ov.getContext('2d');
+const tr = new Tracker(video);
+let showDbg = false, last = null;
+const fovs = [56, 62, 66, 70, 76]; let fi = 2;
+$('#bFov').onclick = () => { fi = (fi + 1) % fovs.length; tr.hfov = fovs[fi]; $('#bFov').textContent = 'FOV ' + fovs[fi] + '°'; };
+$('#bFlip').onclick = () => { tr.flipUp = !tr.flipUp; $('#bFlip').textContent = 'UP: ' + (tr.flipUp ? 'flipped' : 'normal'); };
+$('#bDbg').onclick = () => { showDbg = !showDbg; $('#dbg').hidden = !showDbg; };
+$('#go').onclick = async () => {
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) { try { await DeviceMotionEvent.requestPermission(); } catch (e) {} }
+    try { await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } catch (e) {}
+    await tr.start(); $('#start').hidden = true;
+  } catch (e) { $('#err').textContent = 'Camera could not start: ' + e.message + '. Open this page over https (or localhost) in Chrome and allow the camera.'; }
+};
+tr.on(s => { last = s; });
+function chip(el, st) {
+  el.querySelector('span').textContent = st.top < 0 ? '—' : st.name + (st.settled ? ' ✓' : '…');
+  el.classList.toggle('ok', st.settled);
+}
+function draw() {
+  const W = ov.clientWidth, H = ov.clientHeight, dpr = devicePixelRatio || 1;
+  if (ov.width !== W * dpr) { ov.width = W * dpr; ov.height = H * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (last) {
+    const sc = Math.max(W / last.w, H / last.h), ox = (W - last.w * sc) / 2, oy = (H - last.h * sc) / 2;
+    const P = p => [ox + p[0] * sc, oy + p[1] * sc];
+    for (const m of last.markers) {
+      const isTop = m.id === last.bat.top || m.id === last.bowl.top;
+      ctx.lineWidth = isTop ? 5 : 2.5; ctx.strokeStyle = m.id < 6 ? '#F7C51E' : '#5aa9ff';
+      ctx.beginPath(); m.corners.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(...q) : ctx.moveTo(...q); }); ctx.closePath(); ctx.stroke();
+      const c = P(m.corners.reduce((a, p) => [a[0] + p[0] / 4, a[1] + p[1] / 4], [0, 0]));
+      ctx.font = '600 15px Baloo'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+      const label = FACE_NAMES[m.id] + (isTop ? ' (TOP)' : '');
+      ctx.strokeText(label, c[0] - 30, c[1] - 26); ctx.fillText(label, c[0] - 30, c[1] - 26);
+      if (showDbg) { const n = m.normal; ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(...c); ctx.lineTo(c[0] + n[0] * 60, c[1] + n[1] * 60); ctx.stroke(); }
+    }
+    if (showDbg && last.up) { ctx.strokeStyle = '#ff0'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.lineTo(W / 2 + last.up[0] * 80, H / 2 + last.up[1] * 80); ctx.stroke(); }
+    chip($('#cBat'), last.bat); chip($('#cBowl'), last.bowl);
+    if (showDbg) $('#dbg').textContent = `proc ${last.w}x${last.h}\ndetect ${last.stats.ms.toFixed(0)} ms\nfps ${last.stats.fps.toFixed(1)}\nmotion ${last.stats.motion ? 'yes' : 'no'}\nup ${last.up ? last.up.map(v => v.toFixed(2)).join(' ') : '—'}\nangle ${(screen.orientation && screen.orientation.angle) || 0}\nmarkers ${last.markers.map(m => m.id).join(',')}`;
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+window.__dabba = () => last;   // for automated tests
+</script>
+</body>
+</html>
