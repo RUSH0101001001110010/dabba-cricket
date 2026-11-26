@@ -34,7 +34,7 @@ a{color:var(--mar)}
 <body>
 <canvas id="gl"></canvas>
 <div id="ui">
-  <div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>AR TEST · v0.7</span></div>
+  <div class="bar"><span>DABBA CRICKET</span><span class="sp"></span><span>AR TEST · v0.8</span></div>
   <div id="tools" hidden><button id="bExit">EXIT AR</button><button id="bDbg">DEBUG</button></div>
   <div id="lockbar" hidden><span id="lockTxt"></span><button id="bRoll">NEW ROLL</button><button id="bRead">READ NOW</button></div>
   <div id="dbg" hidden></div>
@@ -54,7 +54,7 @@ a{color:var(--mar)}
 </div>
 <script>window.onerror = (m) => { window.__err = String(m); const e = document.getElementById('msg'); if (e) e.textContent = 'Error: ' + m; };</script>
 <script type="module">
-import { XRDabba, xrSupported, FACE_NAMES } from './js/xrar.js?v=7';
+import { XRDabba, xrSupported, FACE_NAMES } from './js/xrar.js?v=8';
 const $ = s => document.querySelector(s);
 let ar = null, showDbg = false, info = {};
 const inAR = (on) => { $('#start').hidden = on; for (const id of ['#tools', '#cBat', '#cBowl', '#hint']) $(id).hidden = !on; if (!on) { $('#lockbar').hidden = true; $('#dbg').hidden = true; } };

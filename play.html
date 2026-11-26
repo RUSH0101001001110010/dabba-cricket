@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="theme-color" content="#F7C51E">
+<title>Dabba Cricket · Play</title>
+<style>
+@font-face{font-family:Bungee;src:url(fonts/Bungee-Regular.ttf)}
+@font-face{font-family:Baloo;src:url(fonts/Baloo2-Medium.ttf)}
+@font-face{font-family:VT;src:url(fonts/VT323-Regular.ttf)}
+:root{--mar:#F7C51E;--blu:#1F6FB2;--ink:#2B2B2B;--crm:#FAF4E6;--grn:#5DB33B;--red:#D62828;--org:#F2711C;--pnk:#E8338B;--teal:#3EC1C9;--ph:#9DB39A}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:#141210;color:var(--crm);font:16px/1.4 Baloo,system-ui,sans-serif;overflow:hidden;user-select:none}
+#gl{display:none}
+#ui{position:fixed;inset:0}
+button{font:15px Bungee;padding:10px 16px;border-radius:14px;border:4px solid var(--ink);background:var(--mar);color:var(--ink);min-height:46px;cursor:pointer}
+button.alt{background:var(--crm)}button.blue{background:#9cc6ef}button.small{font-size:12px;padding:6px 10px;min-height:36px;border-width:3px}
+button:disabled{opacity:.45}
+.panel{position:absolute;left:50%;transform:translateX(-50%);background:var(--crm);color:var(--ink);border:4px solid var(--ink);border-radius:18px;padding:12px 16px;text-align:center;max-width:94vw}
+.panel h2{font:20px Bungee;margin:2px 0 6px}
+.panel{max-height:calc(100% - 56px);overflow:auto}
+@media (orientation:landscape){.panel h2{font-size:17px;margin:0 0 2px}#faces .grid{grid-template-columns:repeat(6,1fr)}#field{display:grid;grid-template-columns:auto auto;gap:4px 14px;align-items:center}#field h2,#field>div:nth-child(2){grid-column:1/3}#field .row{flex-direction:column}}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+/* scoreboard: Doordarshan style */
+#score{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:6px 10px;background:#141210ee;border-bottom:3px solid var(--mar);font:22px/1 VT,monospace;color:var(--ph)}
+#score b{font:14px Bungee;color:var(--mar)}#score .sp{flex:1}
+#menuBtn{position:absolute;top:44px;right:8px}
+/* home */
+#home{position:fixed;inset:0;overflow:auto;background:var(--mar);color:var(--ink);display:grid;place-items:center;padding:18px;text-align:center}
+#home h1{font:clamp(40px,11vw,72px)/0.95 Bungee;margin:0}
+#home .tag{display:inline-block;font:14px Bungee;background:var(--ink);color:var(--mar);padding:5px 14px;border-radius:30px;margin:8px 0 14px}
+#home label{display:block;margin:6px 0;font-weight:600}
+#home input,#home select{font:16px Baloo;padding:6px 10px;border:3px solid var(--ink);border-radius:10px;background:var(--crm);width:150px}
+.seg{display:inline-flex;border:3px solid var(--ink);border-radius:12px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:40px;background:var(--crm)}.seg button.on{background:var(--ink);color:var(--mar)}
+#homeMsg{color:#8a1c1c;max-width:420px;margin:8px auto}
+/* in-game */
+#hint{position:absolute;left:50%;transform:translateX(-50%);top:92px;background:#000b;padding:6px 14px;border-radius:12px;font-size:15px;text-align:center;white-space:nowrap}
+.chips{position:absolute;left:2%;right:2%;bottom:12px;display:flex;gap:8px}
+.chip{flex:1;padding:8px 10px;border-radius:14px;border:4px solid var(--ink);font:17px Bungee;color:var(--ink);background:var(--crm);text-align:center}
+.chip small{display:block;font:12px Baloo;opacity:.8}
+.chip.bat{border-color:#B8860B}.chip.bowl{border-color:var(--blu)}.chip.ok{background:var(--mar)}.chip.bowl.ok{background:#9cc6ef}.chip.lock{background:var(--grn)}
+#tapzone{position:absolute;left:0;right:0;bottom:0;top:40%;display:grid;place-items:end center;padding-bottom:18px}
+#tapzone .big{font:28px Bungee;background:var(--red);color:#fff;border:5px solid var(--ink);border-radius:50%;width:132px;height:132px;display:grid;place-items:center}
+#meter{position:absolute;left:8%;right:8%;bottom:160px;height:22px;border:3px solid var(--ink);border-radius:12px;background:#ffffffcc;overflow:hidden}
+#meter .good{position:absolute;top:0;bottom:0;background:#9cc6efcc}#meter .perf{position:absolute;top:0;bottom:0;background:var(--grn)}
+#meter .dot{position:absolute;top:-2px;width:6px;bottom:-2px;background:var(--ink);border-radius:3px}
+#callout{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%) rotate(-4deg);font:clamp(42px,12vw,86px) Bungee;color:var(--mar);-webkit-text-stroke:3px var(--ink);text-shadow:5px 5px 0 var(--ink);white-space:nowrap;pointer-events:none}
+#callout.out{color:var(--red)}
+#comm{position:absolute;left:4%;right:4%;bottom:118px;background:#141210ee;border:3px solid var(--org);border-radius:10px;padding:6px 12px;font:20px/1.15 VT,monospace;color:var(--ph)}
+#comm b{color:var(--org);font:13px Bungee}
+#resultBtns{position:absolute;left:0;right:0;bottom:18px}
+/* field setter */
+#field .ground{position:relative;width:min(72vw,300px,calc(100vh - 150px));aspect-ratio:1;margin:6px auto;border-radius:50%;background:radial-gradient(circle,#7cc35a 0 60%,#5DB33B 61%);border:4px solid var(--ink)}
+#field .strip{position:absolute;left:46%;width:8%;top:30%;height:40%;background:#dec480;border:2px solid var(--ink)}
+#field .z{position:absolute;transform:translate(-50%,-50%);font:10px Bungee;padding:5px 6px;border-radius:10px;border:3px solid var(--ink);background:var(--crm);min-height:0;white-space:nowrap}
+#field .z.on{background:var(--blu);color:#fff}
+/* manual faces + 2D view */
+#faces .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0}
+#faces .grid button{font-size:11px;padding:8px 4px;min-height:38px}#faces .grid button.on{background:var(--ink);color:var(--mar)}
+#view2d{position:absolute;inset:40px 0 0 0;width:100%;height:calc(100% - 40px);background:#2d4a2b}
+#overlay{position:absolute;inset:0;background:#000a;display:grid;place-items:center}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="ui">
+  <canvas id="view2d" hidden></canvas>
+  <div id="score" hidden><b id="sTeam">P1</b><span id="sRuns">0/0</span><span id="sOvers">0.0</span><span class="sp"></span><span id="sTarget"></span><b id="sCond"></b></div>
+  <button id="menuBtn" class="small alt" hidden>MENU</button>
+  <div id="hint" hidden></div>
+
+  <!-- toss / start -->
+  <div id="toss" class="panel" style="top:70px" hidden><h2>WHO BATS FIRST?</h2><div class="row"><button id="t0">P1</button><button id="t1" class="blue">P2</button><button id="tR" class="alt">TOSS COIN</button></div><p id="tossTxt" style="margin:6px 0 0"></p></div>
+  <!-- conditions -->
+  <div id="conds" class="panel" style="top:70px" hidden><h2>TODAY'S CONDITIONS</h2><p id="condTxt" style="font:18px Bungee;margin:4px 0"></p><p id="condEff" style="margin:2px 0 8px"></p><button id="condOk">LET'S PLAY</button></div>
+  <!-- field setter -->
+  <div id="field" class="panel" style="top:48px" hidden><h2 id="fieldTitle">BOWLER: SET YOUR FIELD</h2><div style="font-size:13px">Batsman, look away! Tap <span id="fieldN">3</span> places.</div><div class="ground"><div class="strip"></div></div><div class="row"><button id="fieldAuto" class="alt small">RANDOM</button><button id="fieldOk" disabled>DONE</button></div></div>
+  <!-- roll / read -->
+  <div id="rollPanel" class="panel" style="top:48px" hidden><h2 id="rollTitle">ROLL BOTH DABBAS</h2><div id="rollSub" style="font-size:14px">Point the phone at both cubes.</div>
+    <div class="row" id="lockRow" style="margin-top:8px" hidden><button id="rrBat" class="small alt">RE-ROLL (BAT)</button><button id="rrBowl" class="small alt">RE-ROLL (BOWL)</button><button id="bowlBtn">BOWL ▶</button></div>
+    <div style="margin-top:6px"><button id="manualBtn" class="small alt">CAN'T SCAN? TAP FACES</button></div></div>
+  <!-- manual face picker -->
+  <div id="faces" class="panel" style="top:44px" hidden><h2>TAP THE TOP FACES</h2><div style="font:12px Bungee;color:#8a6b00">BATSMAN CUBE</div><div class="grid" id="gBat"></div><div style="font:12px Bungee;color:var(--blu)">BOWLER CUBE</div><div class="grid" id="gBowl"></div><button id="facesOk" disabled>USE THESE</button></div>
+  <div class="chips" id="chips" hidden><div class="chip bat" id="cBat"><small>BATSMAN CUBE</small><span>—</span></div><div class="chip bowl" id="cBowl"><small>BOWLER CUBE</small><span>—</span></div></div>
+  <!-- delivery -->
+  <div id="tapzone" hidden><div id="meter"><div class="good"></div><div class="perf"></div><div class="dot"></div></div><div class="big">TAP!</div></div>
+  <!-- result -->
+  <div id="callout" hidden></div>
+  <div id="comm" hidden></div>
+  <div id="resultBtns" class="row" hidden><button id="nextBtn">NEXT BALL</button></div>
+  <!-- innings break / end -->
+  <div id="overlay" hidden><div class="panel" style="position:static;transform:none"><h2 id="ovTitle"></h2><p id="ovTxt" style="margin:4px 0 10px"></p><div class="row"><button id="ovBtn">CONTINUE</button><button id="ovHome" class="alt" hidden>HOME</button></div></div></div>
+
+  <!-- home -->
+  <div id="home">
+    <div>
+      <h1>DABBA<br>CRICKET</h1><div class="tag">MOHALLA LEAGUE · GULLY</div>
+      <div><span class="seg" id="segMode"><button data-v="vs" class="on">2 PLAYERS</button><button data-v="practice">PRACTICE</button></span></div>
+      <label>Batsman/Player 1 <input id="n1" value="Raju" maxlength="12"></label>
+      <label id="n2wrap">Player 2 <input id="n2" value="Meera" maxlength="12"></label>
+      <label>Commentary <select id="lang"><option value="ro">Hinglish</option><option value="hi">हिंदी</option><option value="en">English</option></select></label>
+      <label><input type="checkbox" id="easy" style="width:auto"> Easy timing</label>
+      <p class="row" style="margin-top:12px"><button id="startAR">START AR</button><button id="startNoAR" class="alt">PLAY WITHOUT AR</button></p>
+      <p id="homeMsg"></p>
+      <p style="font-size:13px">Print the cubes first: <a href="index.html">home page</a> · version 0.8</p>
+    </div>
+  </div>
+</div>
+<script>window.onerror = (m) => { window.__err = String(m); const e = document.getElementById('homeMsg'); if (e) e.textContent = 'Error: ' + m; };</script>
+<script type="module" src="js/play.js?v=8"></script>
+</body>
+</html>

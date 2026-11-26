@@ -1,8 +1,8 @@
 // Dabba Cricket: WebXR (ARCore) version. ARCore tracks the room; we read the cubes from the
 // camera image, convert them into room (world) coordinates, and pin the pitch there.
 // After the lock, face reading stops: the pitch stays fixed in the room even if the cubes leave view.
-import { topFromCube, CubeReader } from './cubepose.js?v=7';
-import { geometry, PITCH } from './arpitch.js?v=7';
+import { topFromCube, CubeReader } from './cubepose.js?v=8';
+import { geometry, PITCH } from './arpitch.js?v=8';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 const S = 0.062, MARKER = S * 0.30, STAMP_OFF = 0.27 * S, PROC_LONG = 1280, MIN_SCORE = 0.6;
@@ -28,8 +28,8 @@ export class XRDabba {
     this.readers = { bat: new CubeReader(), bowl: new CubeReader() };
     this.cubes = { bat: null, bowl: null };                             // world positions (smoothed) + history
     this.tableY = null; this.frameNo = 0; this.busy = false; this.pending = null;
-    this.stats = { ms: 0, fps: 0, cam: 0 };
-    this.worker = new Worker(new URL('./detect-worker.js?v=7', import.meta.url), { type: 'module' });
+    this.stats = { ms: 0, fps: 0, cam: 0 }; this.scene = null; this.paused = false;
+    this.worker = new Worker(new URL('./detect-worker.js?v=8', import.meta.url), { type: 'module' });
     this.worker.onmessage = e => this.onDetect(e.data);
   }
   on(fn) { this.listeners.push(fn); }
@@ -102,7 +102,7 @@ export class XRDabba {
     if (this.last) this.stats.fps = this.stats.fps * 0.9 + 100 / (t - this.last); this.last = t;
     // read the camera only while we still need the faces (not after the lock)
     this.frameNo++;
-    if (this.mode !== 'locked' && !this.busy && view.camera && this.frameNo % 2 === 0) {
+    if (this.mode !== 'locked' && !this.paused && !this.busy && view.camera && this.frameNo % 2 === 0) {
       try {
         const img = this.readCamera(view, view.camera);
         if (img) {
@@ -195,7 +195,7 @@ export class XRDabba {
     this.locked = { bat: bt, bowl: wt, batName: FACE_NAMES[bt], bowlName: FACE_NAMES[wt] };
     this.emit({ type: 'locked', locked: this.locked });
   }
-  newRoll() { this.mode = 'waitRoll'; this.rolled = { bat: false, bowl: false }; this.locked = null; this.readers.bat.reset(); this.readers.bowl.reset(); }
+  newRoll(only) { this.mode = 'waitRoll'; this.rolled = { bat: only === 'bowl', bowl: only === 'bat' }; this.locked = null; this.readers.bat.reset(); this.readers.bowl.reset(); }
   readNow() { this.mode = 'reading'; this.locked = null; this.pitch = null; this.previewPitch = null; this.readers.bat.reset(); this.readers.bowl.reset();
     this.cubes = { bat: null, bowl: null }; this.yHist = []; this.tableY = null; this.emit({ type: 'reading' }); }
 
@@ -213,6 +213,7 @@ export class XRDabba {
       quad([add(a, mul(F.side, -sw)), add(a, mul(F.side, sw)), add(b, mul(F.side, sw)), add(b, mul(F.side, -sw))], [0.97, 0.77, 0.12, 1]);
       quad([add(a, mul(F.fwd, -sw)), add(a, mul(F.fwd, sw)), add(b, mul(F.fwd, sw)), add(b, mul(F.fwd, -sw))], [0.97, 0.77, 0.12, 1]);
     }
+    if (this.pitch && this.scene) { try { this.scene(F, { tri, quad, v }); } catch (e) { this.emit({ type: 'error', message: 'scene: ' + e.message }); } }
     const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.meshBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
     this.meshCount = v.length / 7;
   }
