@@ -1,16 +1,19 @@
 // Dabba Cricket: game controller (match flow, UI, AR scene, timing tap, sound + effects)
-import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=14';
-import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap, smartField } from './rules.js?v=14';
-import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=14';
-import { line } from './commentary.js?v=14';
-import { initAudio, sfx, voice, setMuted, isMuted, ambience } from './sfx.js?v=14';
+import { XRDabba, xrSupported, FACE_NAMES } from './xrar.js?v=15';
+import { Match, SHOTS, DELS, ZONES, timingWindows, classifyTap, smartField } from './rules.js?v=15';
+import { deliveryPos, deliveryTime, shotPos, addBall, addFielder, addShadow, addTrail, addFallingStumps, ZONE_ANGLE, ease } from './scene.js?v=15';
+import { line } from './commentary.js?v=15';
+import { puppetList, puppetUrls, PUPPET_NAMES } from './puppets.js?v=15';
+import { initAudio, sfx, voice, setMuted, isMuted, ambience } from './sfx.js?v=15';
 
 const $ = s => document.querySelector(s);
 const show = (sel, on = true) => { for (const s of sel.split(',')) $(s.trim()).hidden = !on; };
 const hideAll = () => show('#toss,#conds,#field,#rollPanel,#faces,#chips,#tapzone,#callout,#perfectTag,#comm,#resultBtns,#overlay,#hint,#vs,#count,#sticker,#crack,#lvl,#replayTag', false);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const opts = { mode: 'vs', lang: 'ro', easy: false };
-let match = null, ar = null, faces = null, anim = null, showField = false, view2d = false, phase = 'home', autoTimer = null;
+let match = null, ar = null, faces = null, anim = null, showField = false, view2d = false, phase = 'home', autoTimer = null, dadiAt = 0;
+const pupImg = {}; for (const [n, u] of Object.entries(puppetUrls())) { const i = new Image(); i.src = u; pupImg[n] = i; }
+const pstate = () => ({ now: performance.now(), anim, field: match && match.inn ? [...match.inn.field] : [], fielders: !!match && match.inn && (showField || (match.mode !== 'vs' && phase !== 'field')), dadiAt });
 // ---------- Gully Challenge: best score (kept on this phone) ----------
 const ch = { best: { runs: 0, balls: 0, name: '' }, beat: false, streak: 0, bestStreak: 0, lastBall: null, hot: [] };
 try { const b = JSON.parse(localStorage.getItem('dabba_best') || 'null'); if (b && b.runs >= 0) ch.best = b; } catch (e) {}
@@ -24,7 +27,7 @@ for (const b of document.querySelectorAll('#segMode button')) b.onclick = () => 
 $('#startAR').onclick = async () => {
   initAudio();
   if (!(await xrSupported())) { $('#homeMsg').textContent = 'AR is not available in this browser. Use Chrome on an ARCore phone (update "Google Play Services for AR"), or tap PLAY WITHOUT AR.'; return; }
-  try { ar = new XRDabba($('#gl'), $('#ui')); wireAR(); ar.paused = true; await ar.start(); startGame(); }
+  try { ar = new XRDabba($('#gl'), $('#ui')); ar.loadSprites(puppetUrls()); wireAR(); ar.paused = true; await ar.start(); startGame(); }
   catch (e) { $('#homeMsg').textContent = 'AR could not start: ' + e.message; ar = null; }
 };
 $('#startNoAR').onclick = () => { initAudio(); ar = null; view2d = true; $('#view2d').hidden = false; requestAnimationFrame(draw2d); startGame(); };
@@ -44,7 +47,9 @@ function wireAR() {
       addShadow(b, F, p); addBall(b, p, F);
       if (anim.r.how === 'bowled' || anim.r.how === 'lbw') addFallingStumps(b, F, Math.min(1, (now - anim.t0) / 700));
     }
-    if (showField && match) for (const z of match.inn.field) addFielder(b, F, z);
+    const ps = pstate();
+    if (ps.fielders && !ar.tex.meera) for (const z of match.inn.field) addFielder(b, F, z);   // plain fielders until the cut-outs load
+    for (const p of puppetList(F, ps)) b.sprite(p.name, p.base, p.h, p);
   };
   ar.on(e => {
     if (e.type === 'read' && phase === 'roll') { chip('#cBat', e.bat); chip('#cBowl', e.bowl); $('#hint').hidden = e.markers > 0; }
@@ -177,7 +182,7 @@ function startDelivery() {
   const del = DELS[faces.bowl], shot = SHOTS[faces.bat];
   const D = deliveryTime(del) * 1000 * (0.8 + Math.random() * 0.45);          // every ball a different speed
   const t0 = performance.now() + 400 + Math.random() * 900;                     // the run-up isn't always the same length
-  anim = { type: 'delivery', del, D, t0, arrive: t0 + D, tapped: null, done: false, bounced: false };
+  anim = { type: 'delivery', del, D, t0, runStart: performance.now(), arrive: t0 + D, tapped: null, done: false, bounced: false };
   anim.win = timingWindows(del, match.cond, opts.easy, shot); const k = lvlScale(); anim.win.perfect *= k; anim.win.good *= k;
   anim.target = 55 + Math.random() * 35;                                        // the bat sits somewhere different on the bar each ball
   const bat = $('#meter .bat') || Object.assign(document.createElement('div'), { className: 'bat' }); bat.style.left = anim.target + '%'; $('#meter').appendChild(bat);
@@ -240,7 +245,7 @@ function showResult(r) {
   // feel
   if (r.runs === 6) { petals(36); sfx.six(); sfx.crowd(1.4); flash(); }
   else if (r.runs === 4) { petals(18); sfx.four(); sfx.crowd(1); }
-  else if (r.out) { shake(); show('#sticker'); if (r.how === 'window') { crack(); sfx.glass(); setTimeout(() => sfx.groan(), 500); } else sfx.groan(); }
+  else if (r.out) { dadiAt = performance.now() + 150; shake(); show('#sticker'); if (r.how === 'window') { crack(); sfx.glass(); setTimeout(() => sfx.groan(), 500); } else sfx.groan(); }
   else if (r.runs === 0) sfx.thud(); else sfx.pop();
   if (navigator.vibrate) navigator.vibrate(r.out ? [90, 60, 90] : r.runs >= 4 ? 150 : 30);
   say(r.key);
@@ -257,7 +262,7 @@ function showResult(r) {
 }
 function next() {
   if (phase !== 'result') return; clearTimeout(autoTimer);
-  anim = null; showField = false; show('#callout,#comm,#resultBtns,#sticker,#crack,#perfectTag', false); if (ar) ar.hideBatStumps = false;
+  anim = null; showField = false; dadiAt = 0; show('#callout,#comm,#resultBtns,#sticker,#crack,#perfectTag', false); if (ar) ar.hideBatStumps = false;
   if (match.phase === 'roll') beginBall();
   else if (match.phase === 'field') beginOver();
   else if (match.phase === 'inningsBreak') overlay('INNINGS BREAK', `${match.names[match.inn.bat]} scored ${match.scoreText()}. ${match.names[match.inn.bowl]} needs ${match.inn.runs + 1} to win. Pass the phone!`, 'START CHASE', () => { match.startNextInnings(); beginOver(); });
@@ -309,18 +314,18 @@ function scoreChallenge() {
 async function replay() {
   const L = ch.lastBall; if (!L) return;
   phase = 'replay'; hideAll(); show('#replayTag'); showField = true; if (ar) ar.hideBatStumps = false;
-  const D = L.D * 1.6, t0 = performance.now() + 250;
-  anim = { type: 'delivery', del: L.del, D, t0, arrive: t0 + D, done: true }; sfx.whoosh();
-  await wait(250 + D);
+  const D = L.D * 1.6, t0 = performance.now() + 900; dadiAt = 0;
+  anim = { type: 'delivery', del: L.del, D, t0, runStart: performance.now(), arrive: t0 + D, done: true }; setTimeout(() => sfx.whoosh(), 900);
+  await wait(900 + D);
   const r = L.r; anim = { type: 'shot', r, t0: performance.now(), D: 1800, slow: false };
   if (r.how === 'bowled' || r.how === 'lbw') { if (ar) ar.hideBatStumps = true; sfx.stumps(); } else if (r.how === 'window') sfx.glass(); else sfx.bat(false);
-  await wait(2000); show('#replayTag', false);
+  dadiAt = performance.now() + 1000; await wait(2200); show('#replayTag', false);
 }
 async function challengeEnd() {
   await replay();
   const I = match.inn, R = I.runs, old = ch.best.runs, isNew = R > old;
   if (isNew) { ch.best = { runs: R, balls: I.balls, name: match.names[0] }; saveBest(); }
-  anim = null; showField = false; if (ar) ar.hideBatStumps = false;
+  anim = null; showField = false; dadiAt = 0; if (ar) ar.hideBatStumps = false;
   if (isNew) { sfx.fanfare(); sfx.crowd(1.5, 3); petals(50); say('WIN'); } else say('LOSE');
   const how = { caught: 'catch out', 'caught behind': 'catch out (edge)', bowled: 'clean bowled', lbw: 'LBW', window: 'window broken' }[I.log[I.log.length - 1].how] || 'out';
   overlay(isNew ? (old ? 'NEW BEST!' : 'FIRST BEST SET!') : 'OUT!',
@@ -376,8 +381,14 @@ function draw2d() {
   const now = performance.now(), fallen = anim && anim.type === 'shot' && (anim.r.how === 'bowled' || anim.r.how === 'lbw') ? Math.min(1, (now - anim.t0) / 600) : 0;
   g.fillStyle = '#F7C51E'; for (const e of [-1, 1]) for (const k of [-0.009, 0, 0.009]) { const [x, y] = pr([e * (L - 0.006), k, 0]);
     if (e < 0 && fallen) { g.save(); g.translate(x, y); g.rotate(fallen * (1.2 + k * 40)); g.fillRect(-2, -14, 4, 14); g.restore(); } else g.fillRect(x - 2, y - 14, 4, 14); }
-  if (showField && match) for (const z of match.inn.field) { const a = ZONE_ANGLE[z] * Math.PI / 180, [x, y] = pr([-L + 0.03 + Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0]);
-    g.fillStyle = '#1F6FB2'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = '11px Baloo'; g.fillText(z, x + 11, y + 4); }
+  const ps = pstate();
+  if (ps.fielders) for (const z of match.inn.field) { const a = ZONE_ANGLE[z] * Math.PI / 180, [x, y] = pr([-L + 0.03 + Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0]);
+    g.fillStyle = '#0004'; g.beginPath(); g.ellipse(x, y, 12, 4, 0, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = '11px Baloo'; g.textAlign = 'center'; g.fillText(z, x, y + 15); g.textAlign = 'left'; }
+  for (const p of puppetList(F2, ps).sort((m, n) => m.base[0] < n.base[0] ? 1 : -1)) {   // far end first
+    const im = pupImg[p.name]; if (!im || !im.complete || !im.naturalWidth) continue;
+    const [x, y] = pr(p.base), hp = p.h * sc * 1.3, wp = hp * im.naturalWidth / im.naturalHeight;
+    g.save(); g.translate(x, y); g.rotate(-(p.tilt || 0)); if (p.flip) g.scale(-1, 1); g.drawImage(im, -wp / 2, -hp, wp, hp); g.restore();
+  }
   let p = null, trail = [];
   if (anim && anim.type === 'delivery' && now >= anim.t0) p = deliveryPos(F2, anim.del, ease(anim.del, (now - anim.t0) / anim.D));
   if (anim && anim.type === 'shot') { const s = shotProgress(now); p = shotPos(F2, anim.r, s); if (anim.r.runs >= 4 || anim.r.out) for (let k = 1; k <= 6; k++) if (s - k * 0.03 > 0) trail.push(shotPos(F2, anim.r, s - k * 0.03)); }

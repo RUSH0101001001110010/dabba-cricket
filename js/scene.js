@@ -1,6 +1,6 @@
 // Dabba Cricket: ball flight, fielders and effects, in pitch coordinates.
 // Pitch frame F: mid, fwd (batsman -> bowler), side, up, len (metres, world coords).
-import { ZONES } from './rules.js?v=14';
+import { ZONES } from './rules.js?v=15';
 
 const add = (a, b) => a.map((v, i) => v + b[i]), mul = (a, k) => a.map(v => v * k);
 export const P = (F, along, across, h = 0) => add(add(add(F.mid, mul(F.fwd, along)), mul(F.side, across)), mul(F.up, h));

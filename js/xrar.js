@@ -1,8 +1,8 @@
 // Dabba Cricket: WebXR (ARCore) version. ARCore tracks the room; we read the cubes from the
 // camera image, convert them into room (world) coordinates, and pin the pitch there.
 // After the lock, face reading stops: the pitch stays fixed in the room even if the cubes leave view.
-import { topFromCube, CubeReader } from './cubepose.js?v=14';
-import { geometry, PITCH } from './arpitch.js?v=14';
+import { topFromCube, CubeReader } from './cubepose.js?v=15';
+import { geometry, PITCH } from './arpitch.js?v=15';
 
 export const FACE_NAMES = ['DRIVE', 'PULL', 'CUT', 'LOFT', 'SWEEP', 'BLOCK', 'YORKER', 'BOUNCER', 'SPIN', 'SLOWER', 'WIDE', 'GOOD LENGTH'];
 const S = 0.062, MARKER = S * 0.30, STAMP_OFF = 0.27 * S, PROC_LONG = 1280, MIN_SCORE = 0.6;
@@ -29,7 +29,7 @@ export class XRDabba {
     this.cubes = { bat: null, bowl: null };                             // world positions (smoothed) + history
     this.tableY = null; this.frameNo = 0; this.busy = false; this.pending = null;
     this.stats = { ms: 0, fps: 0, cam: 0 }; this.scene = null; this.paused = false;
-    this.worker = new Worker(new URL('./detect-worker.js?v=14', import.meta.url), { type: 'module' });
+    this.worker = new Worker(new URL('./detect-worker.js?v=15', import.meta.url), { type: 'module' });
     this.worker.onmessage = e => this.onDetect(e.data);
   }
   on(fn) { this.listeners.push(fn); }
@@ -69,6 +69,27 @@ export class XRDabba {
       `#version 300 es
       precision mediump float; in vec4 vc; out vec4 o; void main(){ o = vc; }`);
     this.meshBuf = gl.createBuffer(); this.meshCount = 0;
+    // paper-puppet sprites: textured cards standing on the pitch, turned to face the phone
+    this.spriteProg = prog(`#version 300 es
+      in vec3 p; in vec2 t; uniform mat4 P, V; out vec2 uv; void main(){ uv = t; gl_Position = P*V*vec4(p,1.); }`,
+      `#version 300 es
+      precision mediump float; in vec2 uv; uniform sampler2D tex; uniform float a; out vec4 o; void main(){ vec4 c = texture(tex, uv); if (c.a < 0.45) discard; o = vec4(c.rgb, a); }`);
+    this.spriteBuf = gl.createBuffer(); this.sprites = []; this.spriteQuads = [];
+    if (!this.tex) this.tex = {};
+    for (const [n, img] of Object.entries(this.spriteImgs || {})) this.uploadSprite(n, img);
+  }
+  // sprites: name -> url; textures are uploaded once the image has loaded (and again if GL starts later)
+  loadSprites(map) {
+    this.spriteImgs = this.spriteImgs || {}; this.tex = this.tex || {};
+    for (const [n, url] of Object.entries(map)) { const img = new Image(); img.onload = () => { this.spriteImgs[n] = img; if (this.gl && this.spriteProg) this.uploadSprite(n, img); }; img.src = url; }
+  }
+  uploadSprite(n, img) {
+    const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.tex[n] = { t, aspect: img.naturalWidth / img.naturalHeight };
   }
   readCamera(view, camera) {
     const gl = this.gl, tex = this.binding.getCameraImage(camera); if (!tex) return null;
@@ -117,10 +138,12 @@ export class XRDabba {
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const pitch = this.pitch || this.previewPitch;
     if (pitch) {
+      const tp = view.transform.position; this.camPos = [tp.x, tp.y, tp.z];
       this.buildMesh(pitch);
       for (const v of pose.views) {
         const vp = layer.getViewport(v); gl.viewport(vp.x, vp.y, vp.width, vp.height);
         this.drawMesh(v.projectionMatrix, v.transform.inverse.matrix);
+        this.drawSprites(v.projectionMatrix, v.transform.inverse.matrix);
       }
     }
     this.emit({ type: 'frame', mode: this.mode, locked: this.locked, stats: this.stats });
@@ -213,9 +236,41 @@ export class XRDabba {
       quad([add(a, mul(F.side, -sw)), add(a, mul(F.side, sw)), add(b, mul(F.side, sw)), add(b, mul(F.side, -sw))], [0.97, 0.77, 0.12, 1]);
       quad([add(a, mul(F.fwd, -sw)), add(a, mul(F.fwd, sw)), add(b, mul(F.fwd, sw)), add(b, mul(F.fwd, -sw))], [0.97, 0.77, 0.12, 1]);
     }
-    if (this.pitch && this.scene) { try { this.scene(F, { tri, quad, v }); } catch (e) { this.emit({ type: 'error', message: 'scene: ' + e.message }); } }
+    this.sprites = []; const sprite = (name, base, h, o = {}) => this.sprites.push({ name, base, h, ...o });
+    if (this.pitch && this.scene) { try { this.scene(F, { tri, quad, v, sprite }); } catch (e) { this.emit({ type: 'error', message: 'scene: ' + e.message }); } }
     const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.meshBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
     this.meshCount = v.length / 7;
+    // sprite cards: upright, turned around the pitch's up axis to face the camera; tilt = puppet rocking about its feet
+    this.spriteQuads = [];
+    const cam = this.camPos || add(F.mid, mul(F.fwd, -0.5));
+    for (const s of this.sprites) {
+      const T = this.tex[s.name]; if (!T) continue;
+      let to = cam.map((c, i) => c - s.base[i]); const d = to[0] * F.up[0] + to[1] * F.up[1] + to[2] * F.up[2]; to = to.map((c, i) => c - F.up[i] * d);
+      let r = [F.up[1] * to[2] - F.up[2] * to[1], F.up[2] * to[0] - F.up[0] * to[2], F.up[0] * to[1] - F.up[1] * to[0]];
+      const n = Math.hypot(...r); r = n < 1e-6 ? F.side : r.map(c => c / n);
+      const w = s.h * T.aspect, ct = Math.cos(s.tilt || 0), st = Math.sin(s.tilt || 0);
+      const at = (x, y) => add(s.base, add(mul(r, x * ct - y * st), mul(F.up, x * st + y * ct)));
+      const u0 = s.flip ? 1 : 0, u1 = s.flip ? 0 : 1;
+      const q = [[at(-w / 2, 0), u0, 1], [at(w / 2, 0), u1, 1], [at(w / 2, s.h), u1, 0], [at(-w / 2, s.h), u0, 0]];
+      const f = []; for (const k of [0, 1, 2, 0, 2, 3]) f.push(...q[k][0], q[k][1], q[k][2]);
+      this.spriteQuads.push({ T, f, a: s.alpha ?? 1 });
+    }
+  }
+  drawSprites(Pm, Vm) {
+    if (!this.spriteQuads.length) return;
+    const gl = this.gl, p = this.spriteProg; gl.useProgram(p);
+    gl.uniformMatrix4fv(gl.getUniformLocation(p, 'P'), false, Pm); gl.uniformMatrix4fv(gl.getUniformLocation(p, 'V'), false, Vm);
+    gl.uniform1i(gl.getUniformLocation(p, 'tex'), 0); gl.activeTexture(gl.TEXTURE0);
+    const lp = gl.getAttribLocation(p, 'p'), lt = gl.getAttribLocation(p, 't'), la = gl.getUniformLocation(p, 'a');
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuf);
+    gl.enableVertexAttribArray(lp); gl.enableVertexAttribArray(lt);
+    gl.enable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (const s of this.spriteQuads) {
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(s.f), gl.DYNAMIC_DRAW);
+      gl.vertexAttribPointer(lp, 3, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(lt, 2, gl.FLOAT, false, 20, 12);
+      gl.bindTexture(gl.TEXTURE_2D, s.T.t); gl.uniform1f(la, s.a); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    gl.disableVertexAttribArray(lp); gl.disableVertexAttribArray(lt);
   }
   drawMesh(Pm, Vm) {
     const gl = this.gl, p = this.meshProg; gl.useProgram(p);
